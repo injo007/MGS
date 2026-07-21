@@ -343,7 +343,7 @@ start_app() {
 
   log "Waiting for the app to answer locally"
   for _ in $(seq 1 60); do
-    if curl -fsS -H "X-CloudOps-Proxy-Secret: ${trusted_proxy_secret}" http://127.0.0.1:3000/login >/dev/null 2>&1; then
+    if curl -fsS -H "X-CloudOps-Proxy-Secret: ${trusted_proxy_secret}" http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
       printf 'Application is responding on localhost.\n'
       return
     fi

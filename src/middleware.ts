@@ -89,6 +89,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
+    pathname === "/api/health" ||
     pathname.includes(".")
   ) {
     return NextResponse.next();
