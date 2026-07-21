@@ -17,7 +17,7 @@ import { forbidden, isAdmin } from "@/lib/access-control";
 interface ImportRequest {
   rows: Record<string, any>[];
   entity: "providers" | "servers" | "ip_addresses" | "outreach" | "tasks";
-  mode: "create" | "update";
+  mode: "create" | "update" | "skip_existing";
   mappings?: Record<string, string>;
 }
 
@@ -227,17 +227,24 @@ export async function POST(request: Request) {
                 .where(eq(providers.id, row.id));
               updated++;
             } else {
-              const existingByWebsite = providerValues.website
+              const existingById = row.id
+                ? await db.select({ id: providers.id }).from(providers).where(eq(providers.id, row.id)).limit(1)
+                : [];
+              const existingByWebsite = existingById.length === 0 && providerValues.website
                 ? await db.select({ id: providers.id }).from(providers).where(eq(providers.website, providerValues.website)).limit(1)
                 : [];
-              const existingByName = existingByWebsite.length === 0
+              const existingByName = existingById.length === 0 && existingByWebsite.length === 0
                 ? await db.select({ id: providers.id }).from(providers).where(eq(providers.name, providerValues.name)).limit(1)
                 : [];
-              const existing = existingByWebsite[0] || existingByName[0] || null;
+              const existing = existingById[0] || existingByWebsite[0] || existingByName[0] || null;
 
               if (existing) {
-                await db.update(providers).set(providerValues).where(eq(providers.id, existing.id));
-                updated++;
+                if (mode === "skip_existing") {
+                  skipped++;
+                } else {
+                  await db.update(providers).set(providerValues).where(eq(providers.id, existing.id));
+                  updated++;
+                }
               } else {
                 await db.insert(providers).values({
                   ...providerValues,

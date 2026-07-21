@@ -97,10 +97,12 @@ export async function GET(request: Request) {
   const sortOrder = searchParams.get("sortOrder") || "desc";
   const status = searchParams.get("status");
   const providerId = searchParams.get("providerId");
+  const assignedUserId = searchParams.get("assignedUserId");
 
   const conditions = [];
   const admin = isAdmin(session);
   const currentUserId = sessionUserId(session);
+  const scopedUserId = admin ? assignedUserId : currentUserId;
 
   if (search) {
     conditions.push(
@@ -109,8 +111,8 @@ export async function GET(request: Request) {
   }
   if (status) conditions.push(eq(servers.status, status as typeof servers.$inferSelect.status));
   if (providerId) conditions.push(eq(servers.providerId, providerId));
-  if (!admin) {
-    conditions.push(sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${servers.id} and ${serverUsers.userId} = ${currentUserId})`);
+  if (scopedUserId) {
+    conditions.push(sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${servers.id} and ${serverUsers.userId} = ${scopedUserId})`);
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;

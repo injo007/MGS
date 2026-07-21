@@ -16,25 +16,49 @@ import {
 import { and, eq, count, sql, isNotNull, desc, gte, max, or, isNull } from "drizzle-orm";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
   const sixWeeksAgo = new Date();
   sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
   const admin = isAdmin(session);
   const currentUserId = sessionUserId(session);
-  const assignedServerCondition = admin
-    ? undefined
-    : sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${servers.id} and ${serverUsers.userId} = ${currentUserId})`;
-  const assignedSendingCondition = admin
-    ? undefined
-    : sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${sendingLogs.serverId} and ${serverUsers.userId} = ${currentUserId})`;
-  const assignedIpCondition = admin
-    ? undefined
-    : sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${ipAddresses.serverId} and ${serverUsers.userId} = ${currentUserId})`;
+  const requestedUserId = searchParams.get("userId") || "";
+  const scopedUserId = admin ? requestedUserId || null : currentUserId;
+  const providerUserCondition = scopedUserId
+    ? sql`(
+        ${providers.assignedUserId} = ${scopedUserId}
+        or exists (
+          select 1 from ${servers}
+          inner join ${serverUsers} on ${serverUsers.serverId} = ${servers.id}
+          where ${servers.providerId} = ${providers.id}
+            and ${serverUsers.userId} = ${scopedUserId}
+        )
+        or exists (
+          select 1 from ${servers}
+          where ${servers.providerId} = ${providers.id}
+            and ${servers.createdById} = ${scopedUserId}
+        )
+      )`
+    : undefined;
+  const assignedServerCondition = scopedUserId
+    ? sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${servers.id} and ${serverUsers.userId} = ${scopedUserId})`
+    : undefined;
+  const assignedSendingCondition = scopedUserId
+    ? eq(sendingLogs.mailerId, scopedUserId)
+    : undefined;
+  const assignedIpCondition = scopedUserId
+    ? sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${ipAddresses.serverId} and ${serverUsers.userId} = ${scopedUserId})`
+    : undefined;
+  const taskUserCondition = scopedUserId
+    ? or(eq(tasks.assignedUserId, scopedUserId), isNull(tasks.assignedUserId))
+    : undefined;
+  const outreachUserCondition = scopedUserId ? eq(outreachLogs.sentById, scopedUserId) : undefined;
+  const auditUserCondition = scopedUserId ? eq(auditLogs.userId, scopedUserId) : undefined;
 
   const [
     totalProviders,
@@ -56,27 +80,30 @@ export async function GET() {
     userSendingOverTime,
     serverUtilization,
   ] = await Promise.all([
-    db.select({ total: count() }).from(providers),
+    db.select({ total: count() }).from(providers).where(providerUserCondition),
 
     db
       .select({ status: providers.contactStatus, count: count() })
       .from(providers)
+      .where(providerUserCondition)
       .groupBy(providers.contactStatus),
 
     db
       .select({ status: providers.responseStatus, count: count() })
       .from(providers)
+      .where(providerUserCondition)
       .groupBy(providers.responseStatus),
 
     db
       .select({ decision: providers.decision, count: count() })
       .from(providers)
+      .where(providerUserCondition)
       .groupBy(providers.decision),
 
     db
       .select({ total: count() })
       .from(providers)
-      .where(isNotNull(providers.assignedUserId)),
+      .where(providerUserCondition ? and(providerUserCondition, isNotNull(providers.assignedUserId)) : isNotNull(providers.assignedUserId)),
 
     db
       .select({ total: count() })
@@ -90,12 +117,13 @@ export async function GET() {
     db
       .select({ status: tasks.status, count: count() })
       .from(tasks)
-      .where(admin ? undefined : or(eq(tasks.assignedUserId, currentUserId), isNull(tasks.assignedUserId)))
+      .where(taskUserCondition)
       .groupBy(tasks.status),
 
     db
       .select({ channel: outreachLogs.channel, count: count() })
       .from(outreachLogs)
+      .where(outreachUserCondition)
       .groupBy(outreachLogs.channel),
 
     db
@@ -121,7 +149,7 @@ export async function GET() {
         count: count(),
       })
       .from(outreachLogs)
-      .where(gte(outreachLogs.date, sixWeeksAgo))
+      .where(outreachUserCondition ? and(gte(outreachLogs.date, sixWeeksAgo), outreachUserCondition) : gte(outreachLogs.date, sixWeeksAgo))
       .groupBy(sql`to_char(${outreachLogs.date}, 'YYYY-MM-DD')`)
       .orderBy(sql`to_char(${outreachLogs.date}, 'YYYY-MM-DD')`),
 
@@ -136,7 +164,7 @@ export async function GET() {
       })
       .from(auditLogs)
       .innerJoin(users, eq(auditLogs.userId, users.id))
-      .where(admin ? undefined : eq(auditLogs.userId, currentUserId))
+      .where(auditUserCondition)
       .orderBy(desc(auditLogs.createdAt))
       .limit(10),
 

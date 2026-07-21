@@ -23,6 +23,8 @@ const ENTITY_OPTIONS = [
   { value: "tasks", label: "Tasks" },
 ];
 
+type ImportMode = "create" | "update" | "skip_existing";
+
 const ENTITY_FIELDS: Record<string, { key: string; label: string; required: boolean }[]> = {
   providers: [
     { key: "name", label: "Name", required: true },
@@ -87,7 +89,7 @@ const ENTITY_FIELDS: Record<string, { key: string; label: string; required: bool
 export default function ImportsPage() {
   const [step, setStep] = useState(0);
   const [entity, setEntity] = useState("");
-  const [mode, setMode] = useState<"create" | "update">("create");
+  const [mode, setMode] = useState<ImportMode>("create");
   const [fileName, setFileName] = useState<string | null>(null);
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<Record<string, any>[]>([]);
@@ -363,12 +365,16 @@ export default function ImportsPage() {
                   </label>
                   <select
                     value={mode}
-                    onChange={(e) => setMode(e.target.value as "create" | "update")}
+                    onChange={(e) => setMode(e.target.value as ImportMode)}
                     className="h-[34px] w-full rounded-[7px] border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30 focus:border-[#4F46E5]"
                   >
                     <option value="create">Create new records</option>
                     <option value="update">Update existing records</option>
+                    <option value="skip_existing">Skip existing records</option>
                   </select>
+                  <p className="mt-1 text-[12px] text-[#6B7280]">
+                    Skip existing keeps current providers unchanged when the uploaded row matches an existing ID, website, or name.
+                  </p>
                 </div>
               </div>
 
