@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { providers, providerContacts, providerResponses, outreachLogs, settings } from "@/db/schema";
 import { and, or, ilike, eq } from "drizzle-orm";
 import { Readable } from "stream";
+import { inferResponseType, providerUpdateForResponse } from "@/lib/provider-response-classifier";
 
 export interface InboxEmail {
   uid: number;
@@ -163,97 +164,6 @@ function createClient(config: ImapConfig) {
     logger: undefined,
     connectionTimeout: 30000,
   });
-}
-
-export function inferResponseType(subject: string, body: string): string {
-  const combined = `${subject} ${body}`.toLowerCase();
-  const mentionsPort25 =
-    combined.includes("port 25") ||
-    combined.includes("port25") ||
-    combined.includes("outbound traffic") ||
-    combined.includes("outgoing traffic");
-  const port25Positive =
-    mentionsPort25 &&
-    (combined.includes("available") ||
-      combined.includes("open") ||
-      combined.includes("enabled") ||
-      combined.includes("unblocked") ||
-      combined.includes("not blocked") ||
-      combined.includes("allowed") ||
-      combined.includes("approved"));
-  const port25Negative =
-    mentionsPort25 &&
-    (combined.includes("blocked") ||
-      combined.includes("closed") ||
-      combined.includes("disabled") ||
-      combined.includes("not allowed") ||
-      combined.includes("prohibited") ||
-      combined.includes("restricted"));
-
-  if (port25Positive) {
-    return "port25_available";
-  }
-  if (
-    combined.includes("mail server") &&
-    (combined.includes("not allowed") || combined.includes("prohibited") || combined.includes("forbidden"))
-  ) {
-    return "mail_servers_prohibited";
-  }
-  if (port25Negative) {
-    return "port25_blocked";
-  }
-  if (combined.includes("kyc") || combined.includes("know your customer")) {
-    return "requires_kyc";
-  }
-  if (combined.includes("verify") || combined.includes("confirmation") || combined.includes("identity")) {
-    return "needs_verification";
-  }
-  if (combined.includes("deposit") || combined.includes("payment") || combined.includes("fee") || combined.includes("cost")) {
-    return "requires_deposit";
-  }
-  if (combined.includes("support") || combined.includes("ticket") || combined.includes("help desk")) {
-    return "requires_support_request";
-  }
-  if (combined.includes("reject") || combined.includes("denied") || combined.includes("not interested") || combined.includes("unable to")) {
-    return "rejected";
-  }
-  if (combined.includes("approv") || combined.includes("yes") || combined.includes("confirmed") || combined.includes("accepted")) {
-    return "approved";
-  }
-
-  return "other";
-}
-
-function providerUpdateForResponse(responseType: string, responseDate: Date) {
-  const base = {
-    contactStatus: "contacted" as const,
-    responseStatus: "replied" as const,
-    lastContactDate: responseDate,
-    updatedAt: new Date(),
-  };
-
-  if (responseType === "approved" || responseType === "port25_available") {
-    return {
-      ...base,
-      decision: responseType === "approved" ? ("accepted" as const) : ("pending" as const),
-      mailServerAllowed: true,
-      port25Status: responseType === "port25_available" ? ("available" as const) : undefined,
-    };
-  }
-  if (responseType === "rejected") {
-    return { ...base, decision: "denied" as const };
-  }
-  if (responseType === "mail_servers_prohibited" || responseType === "port25_blocked") {
-    return {
-      ...base,
-      decision: "prohibited_sending" as const,
-      mailServerAllowed: false,
-      port25Status: responseType === "port25_blocked" ? ("blocked" as const) : undefined,
-      sendingRestrictions: responseType === "mail_servers_prohibited" ? "Provider response prohibits mail server use." : "Provider response indicates Port 25/outbound traffic is blocked.",
-    };
-  }
-
-  return { ...base, decision: "pending" as const, responseStatus: "needs_follow_up" as const };
 }
 
 async function streamToBuffer(stream: Readable): Promise<Buffer> {

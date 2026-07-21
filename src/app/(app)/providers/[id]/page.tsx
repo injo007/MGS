@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ProviderLogo } from "@/components/shared/provider-logo";
 import {
@@ -259,6 +260,7 @@ export default function ProviderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = React.use(params);
+  const searchParams = useSearchParams();
 
   const [provider, setProvider] = useState<Provider | null>(null);
   const [loading, setLoading] = useState(true);
@@ -308,6 +310,13 @@ export default function ProviderDetailPage({
 
   const [noteContent, setNoteContent] = useState("");
   const [noteIsInternal, setNoteIsInternal] = useState(true);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && ["overview", "outreach", "responses", "servers", "ips", "sending", "notes", "activity"].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     async function fetchProvider() {
@@ -829,7 +838,7 @@ export default function ProviderDetailPage({
       )}
 
       {activeTab === "outreach" && (
-        <div className="bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
+        <div id="conversations" className="scroll-mt-24 bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
           <div className="px-5 py-4 border-b border-[#E5E7EB]">
             <div className="flex items-center justify-between">
               <div>

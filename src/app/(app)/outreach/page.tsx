@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { Search, Mail, MessageSquare, Send, Inbox, X, Plus, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Search, Mail, MessageSquare, Send, Inbox, X, Plus, Loader2, Pencil, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 const CHANNEL_ICONS: Record<string, typeof Mail> = { email: Mail, support_ticket: MessageSquare, contact_form: Send, live_chat: MessageSquare, phone: Mail, other: Inbox };
@@ -21,6 +21,7 @@ interface OutreachItem {
   nextAction: string | null;
   followUpDate: string | null;
   providerName: string | null;
+  sentById: string | null;
   sentByName: string | null;
 }
 
@@ -35,6 +36,7 @@ export default function OutreachPage() {
   const [error, setError] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState("all");
   const [resultFilter, setResultFilter] = useState("all");
+  const [contactedByFilter, setContactedByFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [providers, setProviders] = useState<ProviderOption[]>([]);
@@ -59,6 +61,7 @@ export default function OutreachPage() {
     params.set("pageSize", "100");
     if (channelFilter !== "all") params.set("channel", channelFilter);
     if (resultFilter !== "all") params.set("sendResult", resultFilter);
+    if (contactedByFilter !== "all") params.set("sentById", contactedByFilter);
 
     fetch(`/api/outreach?${params}`)
       .then((res) => { if (!res.ok) throw new Error("Failed to fetch"); return res.json(); })
@@ -66,7 +69,7 @@ export default function OutreachPage() {
       .catch((err) => { setError(err.message); setLoading(false); });
   };
 
-  useEffect(() => { fetchData(); }, [channelFilter, resultFilter]);
+  useEffect(() => { fetchData(); }, [channelFilter, resultFilter, contactedByFilter]);
 
   useEffect(() => {
     if (showCreate) {
@@ -117,16 +120,25 @@ export default function OutreachPage() {
   const filtered = data.filter((item) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return item.providerName?.toLowerCase().includes(q) || item.subject?.toLowerCase().includes(q) || item.recipient?.toLowerCase().includes(q);
+    return item.providerName?.toLowerCase().includes(q) || item.subject?.toLowerCase().includes(q) || item.recipient?.toLowerCase().includes(q) || item.sentByName?.toLowerCase().includes(q);
   });
+
+  const contactedUsers = Array.from(
+    new Map(
+      data
+        .filter((item) => item.sentById && item.sentByName)
+        .map((item) => [item.sentById!, { id: item.sentById!, name: item.sentByName! }])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   const clearFilters = () => {
     setChannelFilter("all");
     setResultFilter("all");
+    setContactedByFilter("all");
     setSearch("");
   };
 
-  const hasActiveFilters = channelFilter !== "all" || resultFilter !== "all" || !!search;
+  const hasActiveFilters = channelFilter !== "all" || resultFilter !== "all" || contactedByFilter !== "all" || !!search;
 
   return (
     <div className="space-y-4">
@@ -191,6 +203,16 @@ export default function OutreachPage() {
           <option value="bounced">Bounced</option>
           <option value="failed">Failed</option>
         </select>
+        <select
+          value={contactedByFilter}
+          onChange={(e) => setContactedByFilter(e.target.value)}
+          className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+        >
+          <option value="all">All Contacted By</option>
+          {contactedUsers.map((user) => (
+            <option key={user.id} value={user.id}>{user.name}</option>
+          ))}
+        </select>
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
@@ -218,6 +240,9 @@ export default function OutreachPage() {
                   Provider
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
+                  Contacted By
+                </th>
+                <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Channel
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
@@ -243,6 +268,7 @@ export default function OutreachPage() {
                   <tr key={`skeleton-${i}`} className="border-t border-[#F1F5F9]">
                     <td className="px-3 py-2.5"><div className="h-3.5 w-20 bg-gray-100 rounded animate-pulse" /></td>
                     <td className="px-3 py-2.5"><div className="h-3.5 w-24 bg-gray-100 rounded animate-pulse" /></td>
+                    <td className="px-3 py-2.5"><div className="h-3.5 w-24 bg-gray-100 rounded animate-pulse" /></td>
                     <td className="px-3 py-2.5"><div className="h-5 w-16 bg-gray-100 rounded-[5px] animate-pulse" /></td>
                     <td className="px-3 py-2.5"><div className="h-3.5 w-28 bg-gray-100 rounded animate-pulse" /></td>
                     <td className="px-3 py-2.5"><div className="h-3.5 w-32 bg-gray-100 rounded animate-pulse" /></td>
@@ -253,7 +279,7 @@ export default function OutreachPage() {
                 ))
               ) : error ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center">
+                  <td colSpan={9} className="px-5 py-12 text-center">
                     <p className="text-[13px] font-medium text-red-600 mb-2">{error}</p>
                     <button
                       onClick={fetchData}
@@ -265,7 +291,7 @@ export default function OutreachPage() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center">
+                  <td colSpan={9} className="px-5 py-12 text-center">
                     <p className="text-[13px] text-[#6B7280] mb-3">No outreach logs found</p>
                     <button
                       onClick={() => setShowCreate(true)}
@@ -289,6 +315,21 @@ export default function OutreachPage() {
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="text-[13px] font-medium text-[#111827]">{item.providerName || "—"}</span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {item.sentByName ? (
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[10px] font-bold text-[#4F46E5]">
+                              {item.sentByName.charAt(0)}
+                            </span>
+                            <span className="text-[13px] font-medium text-[#374151]">{item.sentByName}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-[13px] text-[#9CA3AF]">
+                            <UserRound className="h-3.5 w-3.5" />
+                            System / imported
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">

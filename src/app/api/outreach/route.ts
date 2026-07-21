@@ -18,11 +18,13 @@ export async function GET(request: Request) {
   const providerId = searchParams.get("providerId");
   const channel = searchParams.get("channel");
   const sendResult = searchParams.get("sendResult");
+  const sentById = searchParams.get("sentById");
 
   const conditions = [];
   if (providerId) conditions.push(eq(outreachLogs.providerId, providerId));
   if (channel) conditions.push(eq(outreachLogs.channel, channel as any));
   if (sendResult) conditions.push(eq(outreachLogs.sendResult, sendResult as any));
+  if (sentById) conditions.push(eq(outreachLogs.sentById, sentById));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 

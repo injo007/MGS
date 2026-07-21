@@ -113,6 +113,28 @@ function parseOptionalBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function optionalString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function optionalBillingMethod(value: unknown): "hourly" | "monthly" | "annually" | "one_time" | "free" | null {
+  const text = optionalString(value);
+  if (!text) return null;
+  const normalized = text.toLowerCase().replace(/[\s-]+/g, "_");
+  if (["hourly", "monthly", "annually", "one_time", "free"].includes(normalized)) {
+    return normalized as "hourly" | "monthly" | "annually" | "one_time" | "free";
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -182,46 +204,47 @@ export async function POST(request: Request) {
               supportEmail: row.support_email,
               salesEmail: row.sales_email,
             })?.country;
+            const providerValues = {
+              name: String(row.name).trim(),
+              website: optionalString(row.website),
+              supportEmail: optionalString(row.support_email),
+              salesEmail: optionalString(row.sales_email),
+              country: optionalString(detectedCountry),
+              contactStatus: row.contact_status || "not_contacted",
+              responseStatus: row.response_status || "not_sent",
+              decision: row.decision || "pending",
+              port25Status,
+              ptrStatus: row.ptr_status || "unknown",
+              mailServerAllowed,
+              dailyLimit: optionalNumber(row.daily_limit),
+              startingPrice: optionalString(row.starting_price),
+              billingMethod: optionalBillingMethod(row.billing_method),
+            };
             if (mode === "update" && row.id) {
               await db
                 .update(providers)
-                .set({
-                  name: row.name,
-                  website: row.website,
-                  supportEmail: row.support_email,
-                  salesEmail: row.sales_email,
-                  country: detectedCountry,
-                  contactStatus: row.contact_status || "not_contacted",
-                  responseStatus: row.response_status || "not_sent",
-                  decision: row.decision || "pending",
-                  port25Status,
-                  ptrStatus: row.ptr_status || "unknown",
-                  mailServerAllowed,
-                  dailyLimit: row.daily_limit ? Number(row.daily_limit) : undefined,
-                  startingPrice: row.starting_price,
-                  billingMethod: row.billing_method,
-                })
+                .set(providerValues)
                 .where(eq(providers.id, row.id));
               updated++;
             } else {
-              await db.insert(providers).values({
-                name: row.name,
-                website: row.website,
-                supportEmail: row.support_email,
-                salesEmail: row.sales_email,
-                country: detectedCountry,
-                contactStatus: row.contact_status || "not_contacted",
-                responseStatus: row.response_status || "not_sent",
-                decision: row.decision || "pending",
-                port25Status,
-                ptrStatus: row.ptr_status || "unknown",
-                mailServerAllowed,
-                dailyLimit: row.daily_limit ? Number(row.daily_limit) : undefined,
-                startingPrice: row.starting_price,
-                billingMethod: row.billing_method,
-                createdById: row.created_by_id || session.user.id,
-              });
-              created++;
+              const existingByWebsite = providerValues.website
+                ? await db.select({ id: providers.id }).from(providers).where(eq(providers.website, providerValues.website)).limit(1)
+                : [];
+              const existingByName = existingByWebsite.length === 0
+                ? await db.select({ id: providers.id }).from(providers).where(eq(providers.name, providerValues.name)).limit(1)
+                : [];
+              const existing = existingByWebsite[0] || existingByName[0] || null;
+
+              if (existing) {
+                await db.update(providers).set(providerValues).where(eq(providers.id, existing.id));
+                updated++;
+              } else {
+                await db.insert(providers).values({
+                  ...providerValues,
+                  createdById: session.user.id,
+                });
+                created++;
+              }
             }
             break;
           }
@@ -256,7 +279,7 @@ export async function POST(request: Request) {
                 currency: row.currency || "USD",
                 billingMethod: row.billing_method,
                 notes: row.notes,
-                createdById: row.created_by_id || "",
+                createdById: session.user.id,
               });
               created++;
             }
@@ -348,7 +371,7 @@ export async function POST(request: Request) {
                 dueDate: row.due_date,
                 assignedUserId: row.assigned_user_id,
                 relatedEntityType: row.related_entity_type,
-                createdById: row.created_by_id || "",
+                createdById: session.user.id,
               });
               created++;
             }

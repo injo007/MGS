@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { providers, providerResponses, outreachLogs } from "@/db/schema";
-import { eq, ilike, and, or, desc } from "drizzle-orm";
+import { eq, ilike, or } from "drizzle-orm";
+import { inferResponseType, providerUpdateForResponse } from "@/lib/provider-response-classifier";
 
 export interface EmailData {
   from: string;
@@ -70,6 +71,7 @@ export async function processEmailResponse(emailData: EmailData): Promise<EmailP
   const responseDate = new Date(emailData.date);
 
   const responseType = inferResponseType(emailData.subject, emailData.body) as any;
+  const providerUpdate = providerUpdateForResponse(responseType, responseDate);
 
   const [response] = await db
     .insert(providerResponses)
@@ -79,17 +81,14 @@ export async function processEmailResponse(emailData: EmailData): Promise<EmailP
       responseType,
       fullResponse: emailData.body,
       summary: emailData.subject,
+      decisionRecommendation: providerUpdate.decision,
       createdById: "00000000-0000-0000-0000-000000000000",
     })
     .returning();
 
   await db
     .update(providers)
-    .set({
-      responseStatus: "replied",
-      lastContactDate: responseDate,
-      updatedAt: new Date(),
-    })
+    .set(providerUpdate)
     .where(eq(providers.id, matchedProvider.id));
 
   const [outreachLog] = await db
@@ -113,34 +112,4 @@ export async function processEmailResponse(emailData: EmailData): Promise<EmailP
     outreachLogId: outreachLog.id,
     message: `Response from ${matchedProvider.name} recorded successfully.`,
   };
-}
-
-function inferResponseType(subject: string, body: string): string {
-  const lowerSubject = subject.toLowerCase();
-  const lowerBody = body.toLowerCase();
-  const combined = lowerSubject + " " + lowerBody;
-
-  if (combined.includes("approv") || combined.includes("yes") || combined.includes("confirmed") || combined.includes("accepted")) {
-    return "approved";
-  }
-  if (combined.includes("reject") || combined.includes("denied") || combined.includes("not interested") || combined.includes("unable to")) {
-    return "rejected";
-  }
-  if (combined.includes("verify") || combined.includes("confirmation") || combined.includes("identity")) {
-    return "needs_verification";
-  }
-  if (combined.includes("deposit") || combined.includes("payment") || combined.includes("fee")) {
-    return "requires_deposit";
-  }
-  if (combined.includes("k") || combined.includes("know your customer")) {
-    return "requires_kyc";
-  }
-  if (combined.includes("port 25") || combined.includes("port25") || combined.includes("outbound traffic")) {
-    return "port25_blocked";
-  }
-  if (combined.includes("support") || combined.includes("ticket")) {
-    return "requires_support_request";
-  }
-
-  return "other";
 }
