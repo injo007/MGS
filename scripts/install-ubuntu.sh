@@ -12,6 +12,7 @@ LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 REPO_URL="${REPO_URL:-}"
 SKIP_CERTBOT="${SKIP_CERTBOT:-0}"
 CERTBOT_STAGING="${CERTBOT_STAGING:-0}"
+NO_CACHE_BUILD="${NO_CACHE_BUILD:-0}"
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   exec sudo -E bash "$0" "$@"
@@ -122,6 +123,22 @@ prepare_source() {
   fi
 }
 
+prepare_runtime_files() {
+  log "Preparing runtime files"
+  [ -f "${APP_DIR}/package.json" ] || fail "Application source is missing from ${APP_DIR}."
+  [ -f "${APP_DIR}/Dockerfile" ] || fail "Dockerfile is missing from ${APP_DIR}."
+  [ -f "${APP_DIR}/docker-compose.yml" ] || fail "docker-compose.yml is missing from ${APP_DIR}."
+  [ -f "${APP_DIR}/scripts/docker-entrypoint.sh" ] || fail "scripts/docker-entrypoint.sh is missing from ${APP_DIR}."
+
+  chmod +x "${APP_DIR}/scripts/docker-entrypoint.sh"
+  if [ -f "${APP_DIR}/scripts/install-ubuntu.sh" ]; then
+    chmod +x "${APP_DIR}/scripts/install-ubuntu.sh"
+  fi
+  if [ -f "${APP_DIR}/scripts/reset-tracking-data.sh" ]; then
+    chmod +x "${APP_DIR}/scripts/reset-tracking-data.sh"
+  fi
+}
+
 write_env() {
   log "Writing production environment"
   local env_file="${APP_DIR}/.env"
@@ -194,6 +211,12 @@ issue_certificate() {
     return
   fi
 
+  if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+    log "HTTPS certificate already exists for ${DOMAIN}"
+    certbot renew --quiet || warn "Certificate renewal check failed. Existing certificate was left unchanged."
+    return
+  fi
+
   log "Requesting HTTPS certificate for ${DOMAIN}"
   local certbot_args=(--nginx -d "$DOMAIN" --agree-tos --redirect --non-interactive)
 
@@ -213,7 +236,13 @@ issue_certificate() {
 start_app() {
   log "Building and starting CloudOps CRM"
   cd "$APP_DIR"
-  docker compose --env-file .env up -d --build
+  docker compose --env-file .env pull db cron || true
+  if [ "$NO_CACHE_BUILD" = "1" ]; then
+    docker compose --env-file .env build --pull --no-cache app
+  else
+    docker compose --env-file .env build --pull app
+  fi
+  docker compose --env-file .env up -d --force-recreate
 
   log "Waiting for the app to answer locally"
   for _ in $(seq 1 60); do
@@ -247,6 +276,7 @@ main() {
 
   check_dns
   prepare_source
+  prepare_runtime_files
   write_env
   start_app
   configure_nginx

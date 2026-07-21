@@ -11,6 +11,8 @@ LETSENCRYPT_EMAIL="admin@alphalink.it.com" ./scripts/install-ubuntu.sh
 
 Full instructions are in [docs/ubuntu-deployment.md](docs/ubuntu-deployment.md).
 
+Use the same installer after each server update so the latest source, scripts, env defaults, Docker rebuild, Nginx, and HTTPS checks are applied together.
+
 ## Getting Started
 
 First, run the development server:

@@ -38,6 +38,7 @@ DOMAIN="cloud.alphalink.it.com"
 APP_DIR="/opt/cloudops-crm"
 ADMIN_EMAIL="admin@cloudops.com"
 ADMIN_PASSWORD="set-a-strong-password-before-first-run"
+NO_CACHE_BUILD="0"
 SKIP_CERTBOT="0"
 CERTBOT_STAGING="0"
 ```
@@ -67,12 +68,20 @@ cd /opt/cloudops-crm
 sudo docker compose restart
 ```
 
-Update from Git:
+Apply the latest app update. Use the installer again so source files, scripts, environment defaults, Docker rebuilds, Nginx, and HTTPS checks stay consistent:
 
 ```bash
 cd /opt/cloudops-crm
 sudo git pull --ff-only
-sudo docker compose --env-file .env up -d --build
+sudo ./scripts/install-ubuntu.sh
+```
+
+For a completely clean Docker rebuild:
+
+```bash
+cd /opt/cloudops-crm
+sudo git pull --ff-only
+sudo NO_CACHE_BUILD=1 ./scripts/install-ubuntu.sh
 ```
 
 View logs:
