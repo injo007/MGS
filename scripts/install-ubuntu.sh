@@ -193,6 +193,7 @@ write_env() {
   ensure_env "HTTP_PROXY" "${HTTP_PROXY:-}" "$env_file"
   ensure_env "HTTPS_PROXY" "${HTTPS_PROXY:-}" "$env_file"
   ensure_env "NO_PROXY" "${NO_PROXY:-localhost,127.0.0.1,db,app,cloudops-db,cloudops-app}" "$env_file"
+  ensure_env "ACCESS_ALLOWED_IPS" "${ACCESS_ALLOWED_IPS:-}" "$env_file"
   ensure_env "PROVIDER_CREDENTIALS_SECRET" "$(random_hex 32)" "$env_file"
   ensure_env "SEED_DEMO_TRACKING_DATA" "${SEED_DEMO_TRACKING_DATA:-false}" "$env_file"
   ensure_env "OPENROUTER_API_KEY" "${OPENROUTER_API_KEY:-}" "$env_file"
