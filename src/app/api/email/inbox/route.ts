@@ -47,6 +47,24 @@ function filterEmailsForSources(emails: InboxEmail[], sourceEmails: string[] | n
   return emails.filter((email) => allowed.has((email.sourceEmail || "").toLowerCase()));
 }
 
+function requestedSourceFilter(
+  sourceEmail: string | null,
+  configs: Awaited<ReturnType<typeof getImapConfigs>>,
+  admin: boolean
+) {
+  const requested = sourceEmail?.trim().toLowerCase();
+  const configuredSources = configs.map((account) => account.user.toLowerCase());
+
+  if (requested) {
+    if (!configuredSources.includes(requested)) {
+      return { error: "Selected mailbox is not configured or not assigned to you." };
+    }
+    return { sourceEmails: [requested] };
+  }
+
+  return { sourceEmails: admin ? null : configuredSources };
+}
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -56,9 +74,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const limit = Math.min(500, Math.max(1, Number(searchParams.get("limit") || 500)));
   const allowDailySync = searchParams.get("sync") === "daily";
+  const selectedSourceEmail = searchParams.get("sourceEmail");
   const admin = isAdmin(session);
   const configs = await getImapConfigs(sessionUserId(session), admin);
-  const sourceEmails = admin ? null : configs.map((account) => account.user);
+  const sourceFilter = requestedSourceFilter(selectedSourceEmail, configs, admin);
+  if ("error" in sourceFilter) {
+    return forbidden(sourceFilter.error);
+  }
+  const sourceEmails = sourceFilter.sourceEmails;
   const configured = configs.length > 0;
   if (!configured) {
     const cached = await getCachedImapInbox();

@@ -150,6 +150,7 @@ export default function EmailInboxPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [matchFilter, setMatchFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [showConfig, setShowConfig] = useState(false);
   const [configForm, setConfigForm] = useState({ host: "imap.gmail.com", port: "993", email: "", password: "", label: "", assignedUserId: "" });
   const [accounts, setAccounts] = useState<ImapAccount[]>([]);
@@ -186,7 +187,9 @@ export default function EmailInboxPage() {
   const fetchInbox = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/email/inbox?limit=500&sync=daily");
+      const params = new URLSearchParams({ limit: "500", sync: "daily" });
+      if (admin && sourceFilter !== "all") params.set("sourceEmail", sourceFilter);
+      const res = await fetch(`/api/email/inbox?${params.toString()}`);
       const data: InboxResponse = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load conversations");
       setEmails(data.data ?? []);
@@ -200,12 +203,18 @@ export default function EmailInboxPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [admin, sourceFilter]);
 
   useEffect(() => {
     fetchConfig();
     fetchStatus().finally(fetchInbox);
   }, [fetchConfig, fetchInbox, fetchStatus]);
+
+  useEffect(() => {
+    if (!admin || sourceFilter === "all") return;
+    const stillConfigured = accounts.some((account) => account.email.toLowerCase() === sourceFilter.toLowerCase());
+    if (!stillConfigured) setSourceFilter("all");
+  }, [accounts, admin, sourceFilter]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -213,9 +222,9 @@ export default function EmailInboxPage() {
       const res = await fetch("/api/email/imap-sync", { method: "POST" });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Sync failed");
-      setEmails(result.emails ?? []);
       setSyncStatus((prev) => prev ? { ...prev, lastSync: { ...result, timestamp: new Date().toISOString() } } : prev);
       toast.success(`Saved conversations: ${result.processed} provider emails synced from ${accounts.length || 1} account${(accounts.length || 1) === 1 ? "" : "s"}`);
+      await fetchInbox();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sync failed");
     } finally {
@@ -431,6 +440,16 @@ export default function EmailInboxPage() {
           <option value="matched">Matched</option>
           <option value="unmatched">Unmatched</option>
         </select>
+        {admin && (
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-[34px] max-w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151]">
+            <option value="all">All Mailboxes</option>
+            {accounts.map((account) => (
+              <option key={account.email} value={account.email}>
+                {(account.label || account.email)} · {account.email}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="space-y-3">

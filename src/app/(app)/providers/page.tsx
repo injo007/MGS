@@ -133,7 +133,7 @@ export default function ProvidersPage() {
     params.set("pageSize", String(pageSize));
     if (contactFilter !== "all") params.set("contactStatus", contactFilter);
     if (decisionFilter !== "all") params.set("decision", decisionFilter);
-    params.set("sortBy", "createdAt");
+    params.set("sortBy", "score");
     params.set("sortOrder", "desc");
 
     try {

@@ -144,6 +144,7 @@ write_env() {
   ensure_env "CRON_API_KEY" "$(random_hex 32)" "$env_file"
   ensure_env "EMAIL_WEBHOOK_SECRET" "$(random_hex 32)" "$env_file"
   ensure_env "TELEGRAM_WEBHOOK_SECRET" "$(random_hex 32)" "$env_file"
+  ensure_env "SEED_DEMO_TRACKING_DATA" "${SEED_DEMO_TRACKING_DATA:-false}" "$env_file"
   ensure_env "OPENROUTER_API_KEY" "${OPENROUTER_API_KEY:-}" "$env_file"
   ensure_env "OPENROUTER_MODEL" "${OPENROUTER_MODEL:-openai/gpt-4o-mini}" "$env_file"
   ensure_env "MXTOOLBOX_API_KEY" "${MXTOOLBOX_API_KEY:-}" "$env_file"

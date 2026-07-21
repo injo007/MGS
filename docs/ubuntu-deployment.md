@@ -82,6 +82,13 @@ cd /opt/cloudops-crm
 sudo docker compose logs -f app
 ```
 
+Reset demo tracking data while keeping providers, team, settings, and cached Email Inbox data:
+
+```bash
+cd /opt/cloudops-crm
+sudo ./scripts/reset-tracking-data.sh
+```
+
 Renew HTTPS certificates:
 
 ```bash

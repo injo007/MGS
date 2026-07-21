@@ -8,6 +8,9 @@ const DATABASE_URL =
   "postgresql://postgres:postgres@localhost:5432/cloudops_crm";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@cloudops.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const SEED_DEMO_TRACKING_DATA = ["1", "true", "yes"].includes(
+  String(process.env.SEED_DEMO_TRACKING_DATA || "").toLowerCase()
+);
 
 // Status mapping from CRM data to DB enum values
 const CONTACT_STATUS_MAP: Record<string, string> = {
@@ -396,6 +399,10 @@ async function seed() {
 
     console.log(`  ✓ Imported ${providersData.length} providers`);
 
+    if (!SEED_DEMO_TRACKING_DATA) {
+      console.log("  ⏭ Skipping demo tracking data. Providers, team, settings, and email settings are preserved.");
+    } else {
+
     // ── Outreach (real data from CRM) ──────────────────────────
     console.log("  Importing outreach records...");
     const outreachPath = join(process.cwd(), "data", "outreach.json");
@@ -686,6 +693,8 @@ async function seed() {
       console.log(`  ✓ Imported ${responsesCount} provider responses`);
     } else {
       console.log("  ⏭ No provider response data to import (empty array)");
+    }
+
     }
 
     // ── Summary ────────────────────────────────────────────────

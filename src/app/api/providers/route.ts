@@ -71,6 +71,52 @@ function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof pro
   return cleaned as Partial<typeof providers.$inferInsert>;
 }
 
+const activeServersExpr = sql<number>`(
+  select count(*)::int
+  from ${servers}
+  where ${servers.providerId} = ${providers.id}
+    and ${servers.status} = 'active'
+)`;
+
+const totalServersExpr = sql<number>`(
+  select count(*)::int
+  from ${servers}
+  where ${servers.providerId} = ${providers.id}
+)`;
+
+const totalSendsExpr = sql<number>`(
+  select coalesce(sum(${sendingLogs.actualSends}), 0)::int
+  from ${sendingLogs}
+  inner join ${servers} on ${sendingLogs.serverId} = ${servers.id}
+  where ${servers.providerId} = ${providers.id}
+)`;
+
+const totalSuccessfulExpr = sql<number>`(
+  select coalesce(sum(${sendingLogs.successfulSends}), 0)::int
+  from ${sendingLogs}
+  inner join ${servers} on ${sendingLogs.serverId} = ${servers.id}
+  where ${servers.providerId} = ${providers.id}
+)`;
+
+const providerScoreExpr = sql<number>`least(
+  100,
+  (
+    case
+      when ${totalSendsExpr} > 0 then least(60, floor(${totalSendsExpr} / 100) * 5 + 10)
+      else 0
+    end
+  )
+  + least(${activeServersExpr} * 8, 24)
+  + (
+    case
+      when ${providers.decision} = 'accepted' then 16
+      when ${providers.responseStatus} = 'replied' then 10
+      when ${providers.decision} = 'pending' then 4
+      else 0
+    end
+  )
+)`;
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -81,7 +127,7 @@ export async function GET(request: Request) {
   const search = searchParams.get("search") || "";
   const page = parseInt(searchParams.get("page") || "1", 10);
   const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
-  const sortBy = searchParams.get("sortBy") || "createdAt";
+  const sortBy = searchParams.get("sortBy") || "score";
   const sortOrder = searchParams.get("sortOrder") || "desc";
   const contactStatus = searchParams.get("contactStatus");
   const decision = searchParams.get("decision");
@@ -106,6 +152,7 @@ export async function GET(request: Request) {
 
   const sortColumn = (providers as any)[sortBy] || providers.createdAt;
   const orderFn = sortOrder === "asc" ? asc : desc;
+  const secondaryOrder = sortBy === "score" ? desc(providers.updatedAt) : orderFn(sortColumn);
 
   const [data, totalResult] = await Promise.all([
     db
@@ -150,15 +197,16 @@ export async function GET(request: Request) {
         updatedAt: providers.updatedAt,
         assignedUserName: users.name,
         // Aggregated stats
-        totalServers: sql<number>`(select count(*) from ${servers} where ${servers.providerId} = ${providers.id})`,
-        activeServers: sql<number>`(select count(*) from ${servers} where ${servers.providerId} = ${providers.id} and ${servers.status} = 'active')`,
-        totalSends: sql<number>`(select coalesce(sum(${sendingLogs.actualSends}), 0) from ${sendingLogs} inner join ${servers} on ${sendingLogs.serverId} = ${servers.id} where ${servers.providerId} = ${providers.id})`,
-        totalSuccessful: sql<number>`(select coalesce(sum(${sendingLogs.successfulSends}), 0) from ${sendingLogs} inner join ${servers} on ${sendingLogs.serverId} = ${servers.id} where ${servers.providerId} = ${providers.id})`,
+        totalServers: totalServersExpr,
+        activeServers: activeServersExpr,
+        totalSends: totalSendsExpr,
+        totalSuccessful: totalSuccessfulExpr,
+        score: providerScoreExpr,
       })
       .from(providers)
       .leftJoin(users, eq(providers.assignedUserId, users.id))
       .where(where)
-      .orderBy(orderFn(sortColumn))
+      .orderBy(desc(providerScoreExpr), desc(totalSendsExpr), secondaryOrder)
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     db.select({ total: count() }).from(providers).where(where),
@@ -166,23 +214,15 @@ export async function GET(request: Request) {
 
   const total = totalResult[0]?.total || 0;
 
-  // Calculate score for each provider
+  // Normalize numeric aggregate values returned by PostgreSQL.
   const enriched = data.map((p) => {
-    let score = 0;
-    // Decision scoring
-    if (p.decision === "accepted") score += 40;
-    else if (p.decision === "pending" && p.responseStatus === "replied") score += 25;
-    else if (p.decision === "pending") score += 10;
-    // Server scoring
-    score += Math.min(p.activeServers * 10, 30);
-    // Sending scoring
-    if (p.totalSends > 0) score += Math.min(20, Math.floor(p.totalSends / 100) * 5);
-    // Cap at 100
-    score = Math.min(score, 100);
-
     return {
       ...p,
-      score,
+      totalServers: Number(p.totalServers || 0),
+      activeServers: Number(p.activeServers || 0),
+      totalSends: Number(p.totalSends || 0),
+      totalSuccessful: Number(p.totalSuccessful || 0),
+      score: Number(p.score || 0),
     };
   });
 
