@@ -327,6 +327,11 @@ issue_certificate() {
 start_app() {
   log "Building and starting CloudOps CRM"
   cd "$APP_DIR"
+  local trusted_proxy_secret=""
+  if [ -f "${APP_DIR}/.env" ]; then
+    trusted_proxy_secret="$(env_value "TRUSTED_PROXY_SECRET" "${APP_DIR}/.env")"
+  fi
+
   docker compose --env-file .env pull db cron || true
   if [ "$NO_CACHE_BUILD" = "1" ]; then
     docker compose --env-file .env build --pull --no-cache app
@@ -337,7 +342,7 @@ start_app() {
 
   log "Waiting for the app to answer locally"
   for _ in $(seq 1 60); do
-    if curl -fsS http://127.0.0.1:3000/login >/dev/null 2>&1; then
+    if curl -fsS -H "X-CloudOps-Proxy-Secret: ${trusted_proxy_secret}" http://127.0.0.1:3000/login >/dev/null 2>&1; then
       printf 'Application is responding on localhost.\n'
       return
     fi
