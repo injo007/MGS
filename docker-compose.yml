@@ -27,6 +27,13 @@ services:
       - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD:-}
       - MXTOOLBOX_API_KEY=${MXTOOLBOX_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - PROXY_ONLY=${PROXY_ONLY:-false}
+      - TRUSTED_PROXY_SECRET=${TRUSTED_PROXY_SECRET:-}
+      - OUTBOUND_PROXY_URL=${OUTBOUND_PROXY_URL:-}
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,db,app,cloudops-db,cloudops-app}
+      - PROVIDER_CREDENTIALS_SECRET=${PROVIDER_CREDENTIALS_SECRET:-}
     depends_on:
       db:
         condition: service_healthy
@@ -46,12 +53,15 @@ services:
         while true; do
           sleep 1800
           curl -s -H "Authorization: Bearer $${CRON_API_KEY}" \
+            -H "X-CloudOps-Proxy-Secret: $${TRUSTED_PROXY_SECRET}" \
             http://app:3000/api/cron/server-inactivity && \
             echo "[$(date -Iseconds)] Inactivity check completed" || \
             echo "[$(date -Iseconds)] Inactivity check failed"
         done
     environment:
       - CRON_API_KEY=${CRON_API_KEY:-cloudops-cron-key-change-me}
+      - TRUSTED_PROXY_SECRET=${TRUSTED_PROXY_SECRET:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,db,app,cloudops-db,cloudops-app}
     depends_on:
       - app
     networks:

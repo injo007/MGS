@@ -337,6 +337,31 @@ export const providerContacts = pgTable(
   (t) => [index("provider_contacts_provider_idx").on(t.providerId)]
 );
 
+export const providerCredentials = pgTable(
+  "provider_credentials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => providers.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    loginUrl: text("login_url"),
+    username: text("username"),
+    encryptedPassword: text("encrypted_password"),
+    ownerNote: text("owner_note"),
+    notes: text("notes"),
+    createdById: uuid("created_by_id")
+      .notNull()
+      .references(() => users.id),
+    updatedById: uuid("updated_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("provider_credentials_provider_idx").on(t.providerId),
+  ]
+);
+
 // ─── Outreach ────────────────────────────────────────────────────────────────
 
 export const outreachLogs = pgTable(

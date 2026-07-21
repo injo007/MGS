@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
@@ -238,8 +239,11 @@ function KpiCard({
   );
 }
 
-export default function ServersPage() {
+function ServersPageContent() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const admin = String((session?.user as Record<string, unknown> | undefined)?.roleName || "").toLowerCase() === "admin";
   const [servers, setServers] = useState<ServerRow[]>([]);
   const [providers, setProviders] = useState<ProviderOption[]>([]);
@@ -248,10 +252,7 @@ export default function ServersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const [providerFilter, setProviderFilter] = useState(() => {
-    if (typeof window === "undefined") return "all";
-    return new URLSearchParams(window.location.search).get("providerId") || "all";
-  });
+  const [providerFilter, setProviderFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [regionFilter, setRegionFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -300,6 +301,19 @@ export default function ServersPage() {
       )
     );
 
+  useEffect(() => {
+    setProviderFilter(searchParams.get("providerId") || "all");
+  }, [searchParams]);
+
+  const updateProviderFilter = useCallback((value: string) => {
+    setProviderFilter(value);
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "all") params.delete("providerId");
+    else params.set("providerId", value);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const fetchServers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -341,7 +355,7 @@ export default function ServersPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchServers();
     Promise.all([
-      fetch("/api/providers?pageSize=200&sortBy=name&sortOrder=asc").then((r) => r.json()),
+      fetch("/api/providers?pageSize=1000&sortBy=name&sortOrder=asc").then((r) => r.json()),
       admin ? fetch("/api/users?all=1").then((r) => r.json()) : Promise.resolve({ data: [] }),
     ])
       .then(([providerJson, userJson]) => {
@@ -732,7 +746,7 @@ export default function ServersPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E7EB] p-4">
-          <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+          <select value={providerFilter} onChange={(e) => updateProviderFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
             <option value="all">All Providers</option>
             {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
           </select>
@@ -1148,5 +1162,13 @@ export default function ServersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ServersPage() {
+  return (
+    <Suspense fallback={<div className="h-[320px] animate-pulse rounded-[10px] border border-[#E5E7EB] bg-white" />}>
+      <ServersPageContent />
+    </Suspense>
   );
 }

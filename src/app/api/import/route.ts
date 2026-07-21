@@ -10,7 +10,7 @@ import {
   outreachLogs,
   tasks,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 import { forbidden, isAdmin } from "@/lib/access-control";
 
@@ -135,6 +135,58 @@ function optionalBillingMethod(value: unknown): "hourly" | "monthly" | "annually
   return null;
 }
 
+function normalizeProviderWebsite(value: unknown): string | null {
+  const text = optionalString(value);
+  if (!text) return null;
+  return text
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/+$/, "");
+}
+
+function normalizeEmail(value: unknown): string | null {
+  const text = optionalString(value);
+  return text ? text.toLowerCase() : null;
+}
+
+async function findExistingProvider(row: Record<string, any>, providerValues: { name: string; website: string | null; supportEmail: string | null; salesEmail: string | null }) {
+  if (row.id) {
+    const [existingById] = await db.select({ id: providers.id }).from(providers).where(eq(providers.id, row.id)).limit(1);
+    if (existingById) return existingById;
+  }
+
+  const normalizedWebsite = normalizeProviderWebsite(providerValues.website);
+  if (normalizedWebsite) {
+    const [existingByWebsite] = await db
+      .select({ id: providers.id })
+      .from(providers)
+      .where(sql`regexp_replace(regexp_replace(lower(coalesce(${providers.website}, '')), '^https?://(www\.)?', ''), '/+$', '') = ${normalizedWebsite}`)
+      .limit(1);
+    if (existingByWebsite) return existingByWebsite;
+  }
+
+  const emails = [normalizeEmail(providerValues.supportEmail), normalizeEmail(providerValues.salesEmail)].filter(Boolean) as string[];
+  if (emails.length > 0) {
+    const [existingByEmail] = await db
+      .select({ id: providers.id })
+      .from(providers)
+      .where(or(...emails.flatMap((email) => [
+        sql`lower(coalesce(${providers.supportEmail}, '')) = ${email}`,
+        sql`lower(coalesce(${providers.salesEmail}, '')) = ${email}`,
+      ])))
+      .limit(1);
+    if (existingByEmail) return existingByEmail;
+  }
+
+  if (!normalizedWebsite && emails.length === 0) {
+    const [existingByName] = await db.select({ id: providers.id }).from(providers).where(eq(providers.name, providerValues.name)).limit(1);
+    if (existingByName) return existingByName;
+  }
+
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -209,15 +261,25 @@ export async function POST(request: Request) {
               website: optionalString(row.website),
               supportEmail: optionalString(row.support_email),
               salesEmail: optionalString(row.sales_email),
+              contactFormUrl: optionalString(row.contact_form_url),
               country: optionalString(detectedCountry),
+              region: optionalString(row.region),
+              category: optionalString(row.category),
               contactStatus: row.contact_status || "not_contacted",
               responseStatus: row.response_status || "not_sent",
               decision: row.decision || "pending",
               port25Status,
               ptrStatus: row.ptr_status || "unknown",
               mailServerAllowed,
+              sendingRestrictions: optionalString(row.sending_restrictions),
               dailyLimit: optionalNumber(row.daily_limit),
+              hourlyLimit: optionalNumber(row.hourly_limit),
+              abusePolicyNotes: optionalString(row.abuse_policy_notes),
               startingPrice: optionalString(row.starting_price),
+              setupFee: optionalString(row.setup_fee),
+              paymentMethod: optionalString(row.payment_method),
+              refundPolicy: optionalString(row.refund_policy),
+              currency: optionalString(row.currency) || "USD",
               billingMethod: optionalBillingMethod(row.billing_method),
             };
             if (mode === "update" && row.id) {
@@ -227,16 +289,7 @@ export async function POST(request: Request) {
                 .where(eq(providers.id, row.id));
               updated++;
             } else {
-              const existingById = row.id
-                ? await db.select({ id: providers.id }).from(providers).where(eq(providers.id, row.id)).limit(1)
-                : [];
-              const existingByWebsite = existingById.length === 0 && providerValues.website
-                ? await db.select({ id: providers.id }).from(providers).where(eq(providers.website, providerValues.website)).limit(1)
-                : [];
-              const existingByName = existingById.length === 0 && existingByWebsite.length === 0
-                ? await db.select({ id: providers.id }).from(providers).where(eq(providers.name, providerValues.name)).limit(1)
-                : [];
-              const existing = existingById[0] || existingByWebsite[0] || existingByName[0] || null;
+              const existing = await findExistingProvider(row, providerValues);
 
               if (existing) {
                 if (mode === "skip_existing") {

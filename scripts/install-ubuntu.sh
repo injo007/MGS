@@ -55,6 +55,12 @@ ensure_env() {
   fi
 }
 
+env_value() {
+  local key="$1"
+  local file="$2"
+  grep -E "^${key}=" "$file" | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'
+}
+
 cert_fullchain_path() {
   printf '/etc/letsencrypt/live/%s/fullchain.pem' "$DOMAIN"
 }
@@ -181,6 +187,13 @@ write_env() {
   ensure_env "CRON_API_KEY" "$(random_hex 32)" "$env_file"
   ensure_env "EMAIL_WEBHOOK_SECRET" "$(random_hex 32)" "$env_file"
   ensure_env "TELEGRAM_WEBHOOK_SECRET" "$(random_hex 32)" "$env_file"
+  ensure_env "PROXY_ONLY" "${PROXY_ONLY:-true}" "$env_file"
+  ensure_env "TRUSTED_PROXY_SECRET" "$(random_hex 32)" "$env_file"
+  ensure_env "OUTBOUND_PROXY_URL" "${OUTBOUND_PROXY_URL:-}" "$env_file"
+  ensure_env "HTTP_PROXY" "${HTTP_PROXY:-}" "$env_file"
+  ensure_env "HTTPS_PROXY" "${HTTPS_PROXY:-}" "$env_file"
+  ensure_env "NO_PROXY" "${NO_PROXY:-localhost,127.0.0.1,db,app,cloudops-db,cloudops-app}" "$env_file"
+  ensure_env "PROVIDER_CREDENTIALS_SECRET" "$(random_hex 32)" "$env_file"
   ensure_env "SEED_DEMO_TRACKING_DATA" "${SEED_DEMO_TRACKING_DATA:-false}" "$env_file"
   ensure_env "OPENROUTER_API_KEY" "${OPENROUTER_API_KEY:-}" "$env_file"
   ensure_env "OPENROUTER_MODEL" "${OPENROUTER_MODEL:-openai/gpt-4o-mini}" "$env_file"
@@ -195,6 +208,11 @@ write_env() {
 configure_nginx() {
   log "Configuring Nginx reverse proxy"
   local conf="/etc/nginx/sites-available/cloudops-crm.conf"
+  local trusted_proxy_secret=""
+
+  if [ -f "${APP_DIR}/.env" ]; then
+    trusted_proxy_secret="$(env_value "TRUSTED_PROXY_SECRET" "${APP_DIR}/.env")"
+  fi
 
   if certificate_is_valid; then
     cat > "$conf" <<NGINX
@@ -233,6 +251,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-CloudOps-Proxy-Secret "${trusted_proxy_secret}";
         proxy_read_timeout 120s;
     }
 }
@@ -255,6 +274,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-CloudOps-Proxy-Secret "${trusted_proxy_secret}";
         proxy_read_timeout 120s;
     }
 }

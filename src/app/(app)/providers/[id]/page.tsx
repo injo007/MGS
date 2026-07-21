@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ProviderLogo } from "@/components/shared/provider-logo";
 import {
@@ -36,6 +37,11 @@ import {
   DollarSign,
   Settings2,
   Loader2,
+  KeyRound,
+  Copy,
+  Eye,
+  EyeOff,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCountryFlagUrl } from "@/lib/provider-utils";
@@ -172,6 +178,19 @@ type ActivityRecord = {
   createdAt: string;
 };
 
+type ProviderCredential = {
+  id: string;
+  providerId: string;
+  label: string;
+  loginUrl: string | null;
+  username: string | null;
+  password: string;
+  ownerNote: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function formatEnum(value: string | null | undefined): string {
   if (!value) return "—";
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -261,6 +280,8 @@ export default function ProviderDetailPage({
 }) {
   const { id } = React.use(params);
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  const isAdmin = String((session?.user as Record<string, unknown> | undefined)?.roleName || "").toLowerCase() === "admin";
 
   const [provider, setProvider] = useState<Provider | null>(null);
   const [loading, setLoading] = useState(true);
@@ -282,16 +303,23 @@ export default function ProviderDetailPage({
   const [notesLoading, setNotesLoading] = useState(false);
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
   const loadedSectionsRef = useRef<Record<string, boolean>>({});
   const loadingSectionsRef = useRef<Record<string, boolean>>({});
 
   const [outreachDialogOpen, setOutreachDialogOpen] = useState(false);
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
 
   const [outreachSaving, setOutreachSaving] = useState(false);
   const [serverSaving, setServerSaving] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
+  const [credentialSaving, setCredentialSaving] = useState(false);
+  const [credentialDeletingId, setCredentialDeletingId] = useState<string | null>(null);
+  const [visibleCredentials, setVisibleCredentials] = useState<Record<string, boolean>>({});
+  const [editingCredential, setEditingCredential] = useState<ProviderCredential | null>(null);
 
   const [outreachChannel, setOutreachChannel] = useState("email");
   const [outreachRecipient, setOutreachRecipient] = useState("");
@@ -310,10 +338,18 @@ export default function ProviderDetailPage({
 
   const [noteContent, setNoteContent] = useState("");
   const [noteIsInternal, setNoteIsInternal] = useState(true);
+  const [credentialForm, setCredentialForm] = useState({
+    label: "",
+    loginUrl: "",
+    username: "",
+    password: "",
+    ownerNote: "",
+    notes: "",
+  });
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab && ["overview", "outreach", "responses", "servers", "ips", "sending", "notes", "activity"].includes(tab)) {
+    if (tab && ["overview", "outreach", "responses", "servers", "ips", "sending", "notes", "activity", "credentials"].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -439,6 +475,23 @@ export default function ProviderDetailPage({
     }
   }, [id]);
 
+  const fetchCredentials = useCallback(async (force = false) => {
+    if (!isAdmin) return;
+    if (!force && (loadingSectionsRef.current.credentials || loadedSectionsRef.current.credentials)) return;
+    loadingSectionsRef.current.credentials = true;
+    loadedSectionsRef.current.credentials = true;
+    setCredentialsLoading(true);
+    try {
+      const res = await fetch(`/api/providers/${id}/credentials`);
+      if (res.ok) setCredentials((await res.json()).data || []);
+    } catch {
+      toast.error("Failed to load provider credentials");
+    } finally {
+      loadingSectionsRef.current.credentials = false;
+      setCredentialsLoading(false);
+    }
+  }, [id, isAdmin]);
+
   useEffect(() => {
     if (activeTab === "outreach") {
       fetchConversations();
@@ -449,7 +502,8 @@ export default function ProviderDetailPage({
     else if (activeTab === "sending") fetchStatistics();
     else if (activeTab === "notes") fetchNotes();
     else if (activeTab === "activity") fetchActivity();
-  }, [activeTab, fetchActivity, fetchConversations, fetchOutreach, fetchServers, fetchIps, fetchNotes, fetchStatistics]);
+    else if (activeTab === "credentials") fetchCredentials();
+  }, [activeTab, fetchActivity, fetchConversations, fetchCredentials, fetchOutreach, fetchServers, fetchIps, fetchNotes, fetchStatistics]);
 
   function resetOutreachForm() {
     setOutreachChannel("email");
@@ -468,6 +522,86 @@ export default function ProviderDetailPage({
     setServerOs("");
     setServerStatus("active");
     setServerCost("");
+  }
+
+  function resetCredentialForm() {
+    setEditingCredential(null);
+    setCredentialForm({ label: "", loginUrl: "", username: "", password: "", ownerNote: "", notes: "" });
+  }
+
+  function openCredentialDialog(credential?: ProviderCredential) {
+    if (credential) {
+      setEditingCredential(credential);
+      setCredentialForm({
+        label: credential.label || "",
+        loginUrl: credential.loginUrl || "",
+        username: credential.username || "",
+        password: credential.password || "",
+        ownerNote: credential.ownerNote || "",
+        notes: credential.notes || "",
+      });
+    } else {
+      resetCredentialForm();
+    }
+    setCredentialDialogOpen(true);
+  }
+
+  async function saveCredential() {
+    if (!credentialForm.label.trim()) {
+      toast.error("Account label is required");
+      return;
+    }
+    setCredentialSaving(true);
+    try {
+      const res = await fetch(`/api/providers/${id}/credentials`, {
+        method: editingCredential ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingCredential?.id,
+          ...credentialForm,
+          passwordChanged: !editingCredential || credentialForm.password !== editingCredential.password,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to save credentials");
+      toast.success(editingCredential ? "Credentials updated" : "Credentials saved");
+      setCredentialDialogOpen(false);
+      resetCredentialForm();
+      fetchCredentials(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save credentials");
+    } finally {
+      setCredentialSaving(false);
+    }
+  }
+
+  async function deleteCredential(credentialId: string) {
+    if (!window.confirm("Delete these provider credentials? This cannot be undone.")) return;
+    setCredentialDeletingId(credentialId);
+    try {
+      const res = await fetch(`/api/providers/${id}/credentials`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: credentialId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to delete credentials");
+      toast.success("Credentials deleted");
+      fetchCredentials(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete credentials");
+    } finally {
+      setCredentialDeletingId(null);
+    }
+  }
+
+  async function copyCredential(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error("Copy failed");
+    }
   }
 
   function resetNoteForm() {
@@ -597,6 +731,7 @@ export default function ProviderDetailPage({
     { id: "servers", label: "Servers" },
     { id: "ips", label: "IPs" },
     { id: "sending", label: "Statistics" },
+    ...(isAdmin ? [{ id: "credentials", label: "Credentials" }] : []),
     { id: "notes", label: "Notes" },
     { id: "activity", label: "Activity" },
   ];
@@ -1165,6 +1300,108 @@ export default function ProviderDetailPage({
         </div>
       )}
 
+      {activeTab === "credentials" && isAdmin && (
+        <div className="bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#E5E7EB]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[13px] font-semibold text-[#111827]">Provider Credentials</h3>
+                <p className="mt-0.5 text-[12px] text-[#6B7280]">Admin-only account logins for provider portals. Passwords are encrypted at rest.</p>
+              </div>
+              <button
+                className="flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#4F46E5] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#4338CA]"
+                onClick={() => openCredentialDialog()}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Account
+              </button>
+            </div>
+          </div>
+          <div className="p-5">
+            {credentialsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-24 animate-pulse rounded-[10px] bg-[#F9FAFB]" />
+                ))}
+              </div>
+            ) : credentials.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#F3F4F6]">
+                  <KeyRound className="h-5 w-5 text-[#9CA3AF]" />
+                </div>
+                <p className="text-[13px] font-medium text-[#111827]">No stored credentials</p>
+                <p className="mt-0.5 text-[12px] text-[#6B7280]">Add account credentials after creating a provider portal account.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {credentials.map((credential) => {
+                  const visible = Boolean(visibleCredentials[credential.id]);
+                  return (
+                    <div key={credential.id} className="rounded-[10px] border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="truncate text-[14px] font-bold text-[#111827]">{credential.label}</h4>
+                          <p className="mt-1 text-[12px] text-[#6B7280]">{credential.ownerNote || "No owner note"}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openCredentialDialog(credential)} className="flex h-8 w-8 items-center justify-center rounded-[7px] text-[#6B7280] hover:bg-white hover:text-[#4F46E5]">
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                          <button disabled={credentialDeletingId === credential.id} onClick={() => deleteCredential(credential.id)} className="flex h-8 w-8 items-center justify-center rounded-[7px] text-[#6B7280] hover:bg-white hover:text-[#DC2626] disabled:opacity-50">
+                            {credentialDeletingId === credential.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-2 text-[13px]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-[#6B7280]">Login URL</span>
+                          {credential.loginUrl ? (
+                            <a href={credential.loginUrl} target="_blank" rel="noopener noreferrer" className="max-w-[220px] truncate text-[#4F46E5] hover:underline">
+                              {credential.loginUrl.replace(/^https?:\/\//, "")}
+                            </a>
+                          ) : <span className="text-[#9CA3AF]">-</span>}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-[#6B7280]">Username</span>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="max-w-[180px] truncate text-[#111827]">{credential.username || "-"}</span>
+                            {credential.username && (
+                              <button onClick={() => copyCredential(credential.username || "", "Username")} className="text-[#6B7280] hover:text-[#4F46E5]">
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-[#6B7280]">Password</span>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="max-w-[180px] truncate font-mono text-[12px] text-[#111827]">{visible ? credential.password || "-" : credential.password ? "************" : "-"}</span>
+                            {credential.password && (
+                              <>
+                                <button onClick={() => setVisibleCredentials((current) => ({ ...current, [credential.id]: !visible }))} className="text-[#6B7280] hover:text-[#4F46E5]">
+                                  {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                                <button onClick={() => copyCredential(credential.password, "Password")} className="text-[#6B7280] hover:text-[#4F46E5]">
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {credential.notes && (
+                        <p className="mt-3 rounded-[8px] border border-[#E5E7EB] bg-white p-3 text-[12px] leading-5 text-[#4B5563] whitespace-pre-wrap">{credential.notes}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === "notes" && (
         <div className="bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
           <div className="px-5 py-4 border-b border-[#E5E7EB]">
@@ -1438,6 +1675,104 @@ export default function ProviderDetailPage({
               disabled={serverSaving}
             >
               {serverSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin inline" />}
+              Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Provider Credentials Dialog */}
+      <Dialog
+        open={credentialDialogOpen}
+        onOpenChange={(open) => {
+          setCredentialDialogOpen(open);
+          if (!open) resetCredentialForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingCredential ? "Edit Provider Account" : "Add Provider Account"}</DialogTitle>
+            <DialogDescription>Admin-only credentials for provider portal accounts. Add one record per account.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
+                Account Label *
+                <input
+                  value={credentialForm.label}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, label: e.target.value })}
+                  placeholder="Main account, Billing, Support..."
+                  className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+                />
+              </label>
+              <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
+                Owner Note
+                <input
+                  value={credentialForm.ownerNote}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, ownerNote: e.target.value })}
+                  placeholder="Owner: Marouane, Finance, client..."
+                  className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1.5 text-[13px] font-medium text-[#374151]">
+              Login URL
+              <input
+                value={credentialForm.loginUrl}
+                onChange={(e) => setCredentialForm({ ...credentialForm, loginUrl: e.target.value })}
+                placeholder="https://portal.provider.com"
+                className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+              />
+            </label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
+                Username / Email
+                <input
+                  value={credentialForm.username}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, username: e.target.value })}
+                  placeholder="account@example.com"
+                  className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+                />
+              </label>
+              <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
+                Password / Secret
+                <input
+                  type="password"
+                  value={credentialForm.password}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
+                  placeholder="Stored encrypted"
+                  className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1.5 text-[13px] font-medium text-[#374151]">
+              Notes
+              <textarea
+                value={credentialForm.notes}
+                onChange={(e) => setCredentialForm({ ...credentialForm, notes: e.target.value })}
+                placeholder="2FA owner, account purpose, recovery notes..."
+                rows={3}
+                className="flex w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3.5 text-[13px] font-medium text-[#374151] hover:bg-[#F9FAFB]"
+              onClick={() => {
+                setCredentialDialogOpen(false);
+                resetCredentialForm();
+              }}
+              disabled={credentialSaving}
+            >
+              Cancel
+            </button>
+            <button
+              className="h-[34px] rounded-[7px] bg-[#4F46E5] px-3.5 text-[13px] font-medium text-white hover:bg-[#4338CA] disabled:opacity-50"
+              onClick={saveCredential}
+              disabled={credentialSaving}
+            >
+              {credentialSaving && <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />}
               Save
             </button>
           </DialogFooter>

@@ -109,7 +109,7 @@ export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(50);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingProviders, setDeletingProviders] = useState<Record<string, boolean>>({});
@@ -614,7 +614,21 @@ export default function ProvidersPage() {
             <p className="text-[11px] text-[#6B7280]">
               Showing {startRow}–{endRow} of {total}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(1);
+                  setSelectedIds([]);
+                }}
+                className="h-7 rounded border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#374151]"
+              >
+                <option value={20}>20 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={500}>500 rows</option>
+              </select>
               <button
                 disabled={page === 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}

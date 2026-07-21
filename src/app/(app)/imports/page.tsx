@@ -31,16 +31,26 @@ const ENTITY_FIELDS: Record<string, { key: string; label: string; required: bool
     { key: "website", label: "Website", required: false },
     { key: "support_email", label: "Support Email", required: false },
     { key: "sales_email", label: "Sales Email", required: false },
+    { key: "contact_form_url", label: "Contact Form URL", required: false },
     { key: "country", label: "Country", required: false },
+    { key: "region", label: "Region", required: false },
+    { key: "category", label: "Category", required: false },
     { key: "contact_status", label: "Contact Status", required: false },
     { key: "response_status", label: "Response Status", required: false },
     { key: "decision", label: "Decision", required: false },
     { key: "port25_status", label: "Port 25 Status", required: false },
     { key: "ptr_status", label: "PTR Status", required: false },
+    { key: "mail_server_allowed", label: "Mail Server Allowed", required: false },
+    { key: "sending_restrictions", label: "Sending Restrictions", required: false },
     { key: "daily_limit", label: "Daily Limit", required: false },
+    { key: "hourly_limit", label: "Hourly Limit", required: false },
+    { key: "abuse_policy_notes", label: "Abuse Policy Notes", required: false },
     { key: "starting_price", label: "Starting Price", required: false },
     { key: "billing_method", label: "Billing Method", required: false },
     { key: "currency", label: "Currency", required: false },
+    { key: "setup_fee", label: "Setup Fee", required: false },
+    { key: "payment_method", label: "Payment Method", required: false },
+    { key: "refund_policy", label: "Refund Policy", required: false },
   ],
   servers: [
     { key: "name", label: "Name", required: true },
@@ -118,19 +128,15 @@ export default function ImportsPage() {
     setImporting(false);
   };
 
-  const parseCSV = (text: string): { headers: string[]; rows: Record<string, any>[] } => {
-    const lines = text.split("\n").filter((l) => l.trim());
-    if (lines.length < 2) return { headers: [], rows: [] };
-    const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-    const rows = lines.slice(1).map((line) => {
-      const vals = line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
-      const obj: Record<string, any> = {};
-      headers.forEach((h, i) => {
-        obj[h] = vals[i] || "";
-      });
-      return obj;
+  const parseCSV = async (text: string): Promise<{ headers: string[]; rows: Record<string, any>[] }> => {
+    const Papa = await import("papaparse");
+    const parsed = Papa.parse<Record<string, any>>(text, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim(),
     });
-    return { headers, rows };
+    const headers = parsed.meta.fields?.filter(Boolean) || [];
+    return { headers, rows: parsed.data || [] };
   };
 
   const parseJSON = (text: string): { headers: string[]; rows: Record<string, any>[] } => {
@@ -160,7 +166,7 @@ export default function ImportsPage() {
         autoMap(headers);
         setStep(1);
       } else if (ext === "csv") {
-        const { headers, rows } = parseCSV(text);
+        const { headers, rows } = await parseCSV(text);
         setRawHeaders(headers);
         setRawRows(rows);
         autoMap(headers);
@@ -373,7 +379,7 @@ export default function ImportsPage() {
                     <option value="skip_existing">Skip existing records</option>
                   </select>
                   <p className="mt-1 text-[12px] text-[#6B7280]">
-                    Skip existing keeps current providers unchanged when the uploaded row matches an existing ID, website, or name.
+                    Skip existing keeps current providers unchanged when the uploaded row matches an existing ID, website/domain, or email. Name-only matching is used only when no website or email exists.
                   </p>
                 </div>
               </div>
