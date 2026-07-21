@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { servers, providers, auditLogs, ipAddresses, sendingLogs, serverUsers, users } from "@/db/schema";
-import { eq, ilike, desc, asc, and, count, sql, max } from "drizzle-orm";
+import { eq, ilike, desc, asc, and, count, sql, max, isNull } from "drizzle-orm";
 import { enrichIpAddress, getIpIntelligenceCache } from "@/lib/ip-intelligence";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
 
@@ -323,6 +323,12 @@ export async function POST(request: Request) {
       await db.insert(serverUsers).values({ serverId: created.id, userId });
     }
   }
+
+  const inferredProviderUserId = finalAssignedUserIds[0] || sessionUserId(session);
+  await db
+    .update(providers)
+    .set({ assignedUserId: inferredProviderUserId, updatedAt: new Date() })
+    .where(and(eq(providers.id, created.providerId), isNull(providers.assignedUserId)));
 
   await db.insert(auditLogs).values({
     userId: session.user.id,

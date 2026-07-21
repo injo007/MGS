@@ -55,6 +55,13 @@ interface Provider {
   paymentMethod: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
+  assignedUserEmail: string | null;
+  assignedUsers: Array<{
+    id: string;
+    name: string;
+    email: string;
+    source: "provider" | "server" | "creator";
+  }>;
   lastContactDate: string | null;
   totalServers: number;
   activeServers: number;
@@ -536,12 +543,21 @@ export default function ProvidersPage() {
                       <p className="text-[11px] text-[#6B7280]">{provider.billingMethod || provider.paymentMethod || "—"}</p>
                     </td>
                     <td className="px-3 py-2.5">
-                      {provider.assignedUserName ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-5 w-5 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[8px] font-bold text-[#4F46E5]">
-                            {provider.assignedUserName.charAt(0)}
-                          </div>
-                          <span className="text-[12px] text-[#374151]">{provider.assignedUserName}</span>
+                      {(provider.assignedUsers?.length || provider.assignedUserName) ? (
+                        <div className="flex max-w-[180px] flex-wrap gap-1">
+                          {(provider.assignedUsers?.length ? provider.assignedUsers : [{ id: provider.assignedUserId || "assigned", name: provider.assignedUserName || "Assigned", email: provider.assignedUserEmail || "", source: "provider" as const }]).slice(0, 3).map((user) => (
+                            <span key={user.id} title={`${user.name}${user.source === "provider" ? " · provider assigned" : user.source === "server" ? " · assigned to server" : " · created server"}`} className="inline-flex items-center gap-1 rounded-[999px] bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-[#4F46E5]">
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[8px]">
+                                {user.name.charAt(0)}
+                              </span>
+                              <span className="max-w-[86px] truncate">{user.name}</span>
+                            </span>
+                          ))}
+                          {(provider.assignedUsers?.length || 0) > 3 && (
+                            <span className="inline-flex rounded-[999px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7280]">
+                              +{provider.assignedUsers.length - 3}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-[12px] text-[#9CA3AF]">—</span>

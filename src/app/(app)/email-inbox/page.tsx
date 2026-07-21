@@ -219,11 +219,16 @@ export default function EmailInboxPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await fetch("/api/email/imap-sync", { method: "POST" });
+      const res = await fetch("/api/email/imap-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(admin && sourceFilter !== "all" ? { sourceEmail: sourceFilter } : {}),
+      });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Sync failed");
       setSyncStatus((prev) => prev ? { ...prev, lastSync: { ...result, timestamp: new Date().toISOString() } } : prev);
-      toast.success(`Saved conversations: ${result.processed} provider emails synced from ${accounts.length || 1} account${(accounts.length || 1) === 1 ? "" : "s"}`);
+      const syncedAccountCount = admin && sourceFilter !== "all" ? 1 : accounts.length || 1;
+      toast.success(`Saved conversations: ${result.processed} provider emails synced from ${syncedAccountCount} account${syncedAccountCount === 1 ? "" : "s"}`);
       await fetchInbox();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sync failed");

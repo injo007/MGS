@@ -3,17 +3,29 @@ import { auth } from "@/lib/auth";
 import { getCachedImapInbox, getImapConfigs, saveCachedImapInbox, syncImapInbox } from "@/lib/imap-service";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
 
-export async function POST() {
+export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    const body = await request.json().catch(() => ({}));
+    const requestedSourceEmail = body.sourceEmail ? String(body.sourceEmail).trim().toLowerCase() : "";
     const admin = isAdmin(session);
     const configs = await getImapConfigs(sessionUserId(session), admin);
-    const result = await syncImapInbox(session.user.id, admin);
-    const snapshot = await saveCachedImapInbox(result, session.user.id, "manual", admin ? undefined : configs.map((account) => account.user));
+    const configuredSources = configs.map((account) => account.user.toLowerCase());
+    if (requestedSourceEmail && !configuredSources.includes(requestedSourceEmail)) {
+      return NextResponse.json({ error: "Selected mailbox is not configured or not assigned to you." }, { status: 403 });
+    }
+    const syncSources = requestedSourceEmail ? [requestedSourceEmail] : undefined;
+    const result = await syncImapInbox(session.user.id, admin, syncSources);
+    const snapshot = await saveCachedImapInbox(
+      result,
+      session.user.id,
+      "manual",
+      syncSources || (admin ? undefined : configs.map((account) => account.user))
+    );
     return NextResponse.json(snapshot);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

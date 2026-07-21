@@ -219,7 +219,7 @@ export async function POST(request: Request) {
                 dailyLimit: row.daily_limit ? Number(row.daily_limit) : undefined,
                 startingPrice: row.starting_price,
                 billingMethod: row.billing_method,
-                createdById: row.created_by_id || "",
+                createdById: row.created_by_id || session.user.id,
               });
               created++;
             }

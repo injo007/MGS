@@ -3,8 +3,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, users, auditLogs, servers, sendingLogs } from "@/db/schema";
-import { eq, ilike, desc, asc, and, count, sql } from "drizzle-orm";
+import { providers, users, auditLogs, servers, sendingLogs, serverUsers } from "@/db/schema";
+import { eq, ilike, desc, asc, and, count, sql, inArray } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 
 function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof providers.$inferInsert> {
@@ -196,6 +196,7 @@ export async function GET(request: Request) {
         createdAt: providers.createdAt,
         updatedAt: providers.updatedAt,
         assignedUserName: users.name,
+        assignedUserEmail: users.email,
         // Aggregated stats
         totalServers: totalServersExpr,
         activeServers: activeServersExpr,
@@ -213,11 +214,70 @@ export async function GET(request: Request) {
   ]);
 
   const total = totalResult[0]?.total || 0;
+  const providerIds = data.map((provider) => provider.id);
+  const usageUsersByProvider = new Map<string, Map<string, { id: string; name: string; email: string; source: "provider" | "server" | "creator" }>>();
+
+  const addUsageUser = (
+    providerId: string,
+    user: { id: string | null; name: string | null; email: string | null; source: "provider" | "server" | "creator" }
+  ) => {
+    if (!user.id || !user.name || !user.email) return;
+    if (!usageUsersByProvider.has(providerId)) usageUsersByProvider.set(providerId, new Map());
+    const existing = usageUsersByProvider.get(providerId)!;
+    if (!existing.has(user.id) || user.source === "provider") {
+      existing.set(user.id, { id: user.id, name: user.name, email: user.email, source: user.source });
+    }
+  };
+
+  for (const provider of data) {
+    addUsageUser(provider.id, {
+      id: provider.assignedUserId,
+      name: provider.assignedUserName,
+      email: provider.assignedUserEmail,
+      source: "provider",
+    });
+  }
+
+  if (providerIds.length > 0) {
+    const [serverAssignees, serverCreators] = await Promise.all([
+      db
+        .select({
+          providerId: servers.providerId,
+          userId: users.id,
+          userName: users.name,
+          userEmail: users.email,
+        })
+        .from(servers)
+        .innerJoin(serverUsers, eq(serverUsers.serverId, servers.id))
+        .innerJoin(users, eq(users.id, serverUsers.userId))
+        .where(inArray(servers.providerId, providerIds)),
+      db
+        .select({
+          providerId: servers.providerId,
+          userId: users.id,
+          userName: users.name,
+          userEmail: users.email,
+        })
+        .from(servers)
+        .innerJoin(users, eq(users.id, servers.createdById))
+        .where(inArray(servers.providerId, providerIds)),
+    ]);
+
+    for (const row of serverAssignees) {
+      addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "server" });
+    }
+    for (const row of serverCreators) {
+      addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "creator" });
+    }
+  }
 
   // Normalize numeric aggregate values returned by PostgreSQL.
   const enriched = data.map((p) => {
+    const assignedUsers = Array.from(usageUsersByProvider.get(p.id)?.values() || []);
     return {
       ...p,
+      assignedUsers,
+      assignedUserName: p.assignedUserName || assignedUsers[0]?.name || null,
       totalServers: Number(p.totalServers || 0),
       activeServers: Number(p.activeServers || 0),
       totalSends: Number(p.totalSends || 0),

@@ -449,8 +449,11 @@ export async function fetchImapInbox(limit = 50, userId?: string, includeAll = t
   return fetchMailboxEmails(config, "INBOX", "incoming", limit);
 }
 
-export async function fetchImapConversations(limit = 500, userId?: string, includeAll = true): Promise<InboxEmail[]> {
-  const configs = await getImapConfigs(userId, includeAll);
+export async function fetchImapConversations(limit = 500, userId?: string, includeAll = true, sourceEmails?: string[]): Promise<InboxEmail[]> {
+  const allowedSources = sourceEmails?.length
+    ? new Set(sourceEmails.map((email) => email.toLowerCase()))
+    : null;
+  const configs = (await getImapConfigs(userId, includeAll)).filter((config) => !allowedSources || allowedSources.has(config.user.toLowerCase()));
   const sentMailboxes = ["[Gmail]/Sent Mail", "Sent", "Sent Mail"];
   const collected: InboxEmail[] = [];
   const seen = new Set<string>();
@@ -477,7 +480,7 @@ export async function fetchImapConversations(limit = 500, userId?: string, inclu
 
 export async function fetchImapMessage(uid: number, sourceEmail?: string, userId?: string, includeAll = true): Promise<InboxEmail | null> {
   const configs = await getImapConfigs(userId, includeAll);
-  const config = sourceEmail ? configs.find((account) => account.user.toLowerCase() === sourceEmail.toLowerCase()) || configs[0] : configs[0];
+  const config = sourceEmail ? configs.find((account) => account.user.toLowerCase() === sourceEmail.toLowerCase()) : configs[0];
   if (!config) return null;
 
   const client = createClient(config);
@@ -498,7 +501,7 @@ export async function fetchImapMessage(uid: number, sourceEmail?: string, userId
 
 export async function moveImapMessage(uid: number, action: "archive" | "delete", sourceEmail?: string) {
   const configs = await getImapConfigs();
-  const config = sourceEmail ? configs.find((account) => account.user.toLowerCase() === sourceEmail.toLowerCase()) || configs[0] : configs[0];
+  const config = sourceEmail ? configs.find((account) => account.user.toLowerCase() === sourceEmail.toLowerCase()) : configs[0];
   if (!config) throw new Error("IMAP is not configured.");
 
   const client = createClient(config);
@@ -621,7 +624,7 @@ export async function applyEmailToProvider(email: InboxEmail, userId: string, cr
   return { providerId, providerName, providerWebsite: providerWebsite ?? null, responseType: syncedEmail.responseType, decision: update.decision, imported: true };
 }
 
-export async function syncImapInbox(userId: string, includeAll = true): Promise<ImapSyncResult> {
+export async function syncImapInbox(userId: string, includeAll = true, sourceEmails?: string[]): Promise<ImapSyncResult> {
   const result: ImapSyncResult = {
     processed: 0,
     matched: 0,
@@ -631,7 +634,7 @@ export async function syncImapInbox(userId: string, includeAll = true): Promise<
   };
 
   try {
-    const emails = await fetchImapConversations(500, userId, includeAll);
+    const emails = await fetchImapConversations(500, userId, includeAll, sourceEmails);
     result.emails = emails;
     result.processed = emails.length;
 
