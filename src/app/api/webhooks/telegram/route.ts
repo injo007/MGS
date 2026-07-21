@@ -1,0 +1,137 @@
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { providers, tasks, auditLogs, users } from "@/db/schema";
+import { count, desc, eq, and, sql } from "drizzle-orm";
+import { sendTelegramMessage, parseTelegramUpdate } from "@/lib/telegram";
+
+export async function POST(request: Request) {
+  try {
+    const secretToken = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
+    const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+
+    if (expectedSecret && secretToken !== expectedSecret) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const rawUpdate = await request.json();
+    const parsed = parseTelegramUpdate(rawUpdate);
+
+    if (!parsed || !parsed.text) {
+      return NextResponse.json({ ok: true });
+    }
+
+    if (!parsed.isCommand) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const chatId = parsed.chatId;
+    const cmd = parsed.command;
+    const args = parsed.commandArgs;
+
+    let responseText: string;
+
+    switch (cmd) {
+      case "/start":
+        responseText = "Welcome to CloudOps CRM Bot! I can provide you with CRM stats and updates.\n\nType /help to see available commands.";
+        break;
+
+      case "/help":
+        responseText = "Available commands:\n\n"
+          + "/start - Welcome message\n"
+          + "/help - Show this help\n"
+          + "/stats - Show CRM dashboard statistics\n"
+          + "/providers - List last 10 providers\n"
+          + "/tasks - List last 10 open tasks";
+        break;
+
+      case "/stats": {
+        const [providerCount] = await db.select({ value: count() }).from(providers);
+        const [taskCount] = await db.select({ value: count() }).from(tasks);
+        const [openTaskCount] = await db.select({ value: count() }).from(tasks).where(eq(tasks.status, "open"));
+        const acceptedCount = await db.select({ value: count() }).from(providers).where(eq(providers.decision, "accepted"));
+        const contactedCount = await db
+          .select({ value: count() })
+          .from(providers)
+          .where(eq(providers.contactStatus, "contacted"));
+
+        responseText = "📊 *CRM Dashboard Stats*\n\n"
+          + `Total providers: ${providerCount.value}\n`
+          + `Accepted: ${acceptedCount[0].value}\n`
+          + `Contacted: ${contactedCount[0].value}\n`
+          + `Total tasks: ${taskCount.value}\n`
+          + `Open tasks: ${openTaskCount.value}\n`;
+        break;
+      }
+
+      case "/providers": {
+        const recentProviders = await db
+          .select({
+            id: providers.id,
+            name: providers.name,
+            country: providers.country,
+            contactStatus: providers.contactStatus,
+            decision: providers.decision,
+          })
+          .from(providers)
+          .orderBy(desc(providers.updatedAt))
+          .limit(10);
+
+        if (recentProviders.length === 0) {
+          responseText = "No providers found.";
+        } else {
+          const lines = recentProviders.map(
+            (p, i) => `${i + 1}. ${p.name} [${p.country || "N/A"}] - Status: ${p.contactStatus}, Decision: ${p.decision}`
+          );
+          responseText = "📋 *Recent Providers:*\n\n" + lines.join("\n");
+        }
+        break;
+      }
+
+      case "/tasks": {
+        const openTasks = await db
+          .select({
+            id: tasks.id,
+            title: tasks.title,
+            priority: tasks.priority,
+            createdAt: tasks.createdAt,
+          })
+          .from(tasks)
+          .where(eq(tasks.status, "open"))
+          .orderBy(desc(tasks.createdAt))
+          .limit(10);
+
+        if (openTasks.length === 0) {
+          responseText = "No open tasks found.";
+        } else {
+          const lines = openTasks.map(
+            (t, i) => `${i + 1}. [${t.priority}] ${t.title}`
+          );
+          responseText = "📌 *Open Tasks:*\n\n" + lines.join("\n");
+        }
+        break;
+      }
+
+      default:
+        responseText = `Unknown command: ${cmd}. Type /help to see available commands.`;
+        break;
+    }
+
+    await sendTelegramMessage(chatId, responseText);
+
+    try {
+      await db.insert(auditLogs).values({
+        userId: "00000000-0000-0000-0000-000000000000",
+        action: "telegram_command",
+        entityType: "telegram_update",
+        newValue: { command: cmd, chatId: chatId, text: parsed.text },
+      });
+    } catch {
+      // audit log failure is non-fatal
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

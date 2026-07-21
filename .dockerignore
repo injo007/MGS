@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+.npm
+
+# Build output
+.next
+out
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment (mount at runtime)
+.env
+.env.*
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+LICENSE
+
+# Data files (seeded into DB at startup)
+data/
+
+# Scripts (not needed in container)
+scripts/
+
+# OS
+.DS_Store
+Thumbs.db

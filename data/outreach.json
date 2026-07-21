@@ -1,0 +1,32 @@
+[
+  {
+    "provider_name": "Hexabyte",
+    "date": null,
+    "contact_channel": "Email",
+    "recipient": "support@hexabyte.se",
+    "subject": "Urgent: Inquiry About Using Cloud Servers for Email",
+    "sent_by": "Marouane",
+    "send_result": "Sent",
+    "next_action": "Await response"
+  },
+  {
+    "provider_name": "GleSYS",
+    "date": null,
+    "contact_channel": "Email",
+    "recipient": "sales@glesys.com",
+    "subject": "Urgent: Inquiry About Using Cloud Servers for Email",
+    "sent_by": "Marouane",
+    "send_result": "Sent",
+    "next_action": "Await response"
+  },
+  {
+    "provider_name": "Clouding",
+    "date": null,
+    "contact_channel": "Email",
+    "recipient": "sales@clouding.io",
+    "subject": "Urgent: Inquiry About Using Cloud Servers for Email",
+    "sent_by": "Marouane",
+    "send_result": "Sent",
+    "next_action": "Await response"
+  }
+]

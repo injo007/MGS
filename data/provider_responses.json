@@ -1,0 +1,26 @@
+[
+  {
+    "provider_name": "Hexabyte",
+    "response_date": "2026-06-15T14:30:00Z",
+    "response_type": "approved",
+    "full_response": "Hi Marouane,\n\nThank you for reaching out. We've reviewed your request and are happy to confirm that port 25 can be used on our VPS plans. We do ask that you follow our acceptable use policy and maintain good sending practices.\n\nPlease let us know if you need any assistance with setup.\n\nBest regards,\nHexabyte Support",
+    "summary": "Port 25 approved, no restrictions beyond AUP compliance.",
+    "decision_recommendation": "Accept provider. Excellent response time and clear policies."
+  },
+  {
+    "provider_name": "GleSYS",
+    "response_date": "2026-06-18T09:15:00Z",
+    "response_type": "port25_available",
+    "full_response": "Hello,\n\nThanks for your inquiry. GleSYS allows SMTP sending from our cloud servers. Port 25 is available by default on all plans.\n\nWe recommend setting up proper PTR records and monitoring your sending volume to maintain good IP reputation.\n\nRegards,\nGleSYS Sales",
+    "summary": "Port 25 open by default. PTR records available. No daily limits mentioned.",
+    "decision_recommendation": "Accept provider. Good European option with open SMTP policies."
+  },
+  {
+    "provider_name": "Clouding",
+    "response_date": "2026-06-22T11:45:00Z",
+    "response_type": "requires_support_request",
+    "full_response": "Hola,\n\nGracias por contactarnos. Regarding your SMTP request:\n\nPort 25 is blocked by default on all Clouding servers, but we can open it upon request. Please submit a support ticket with your use case and we will evaluate.\n\nNote: We reserve the right to re-block ports if abuse is reported.\n\nSaludos,\nClouding Support",
+    "summary": "Port 25 blocked by default, available on request. Risk of re-blocking on abuse reports.",
+    "decision_recommendation": "Accept with caution. Good backup option, but re-blocking risk exists."
+  }
+]

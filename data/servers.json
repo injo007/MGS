@@ -1,0 +1,122 @@
+[
+  {
+    "provider_name": "Hexabyte",
+    "name": "HEX-STO-01",
+    "plan": "VPS Pro 4GB",
+    "location": "Stockholm, Sweden",
+    "operating_system": "Ubuntu 22.04 LTS",
+    "status": "active",
+    "monthly_cost": "29.99",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "Primary sending server for EU campaigns"
+  },
+  {
+    "provider_name": "Hexabyte",
+    "name": "HEX-STO-02",
+    "plan": "VPS Pro 8GB",
+    "location": "Stockholm, Sweden",
+    "operating_system": "Ubuntu 22.04 LTS",
+    "status": "active",
+    "monthly_cost": "49.99",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "Backup server for high-volume days"
+  },
+  {
+    "provider_name": "GleSYS",
+    "name": "GLS-AMS-01",
+    "plan": "Cloud Server L",
+    "location": "Amsterdam, Netherlands",
+    "operating_system": "Debian 11",
+    "status": "active",
+    "monthly_cost": "35.00",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "Netherlands IP block for geo-diversity"
+  },
+  {
+    "provider_name": "Clouding",
+    "name": "CLD-MAD-01",
+    "plan": "Cloud VPS 4GB",
+    "location": "Madrid, Spain",
+    "operating_system": "Ubuntu 20.04 LTS",
+    "status": "active",
+    "monthly_cost": "22.50",
+    "currency": "EUR",
+    "billing_method": "monthly",
+    "notes": "Port 25 opened on request, confirmed working"
+  },
+  {
+    "provider_name": "RackNerd",
+    "name": "RNK-LAX-01",
+    "plan": "KVM VPS 3GB",
+    "location": "Los Angeles, CA",
+    "operating_system": "CentOS 8 Stream",
+    "status": "active",
+    "monthly_cost": "15.88",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "Budget US server for domestic campaigns"
+  },
+  {
+    "provider_name": "RackNerd",
+    "name": "RNK-LAX-02",
+    "plan": "KVM VPS 6GB",
+    "location": "Los Angeles, CA",
+    "operating_system": "Ubuntu 22.04 LTS",
+    "status": "paused",
+    "monthly_cost": "25.88",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "Paused due to high bounce rate investigation"
+  },
+  {
+    "provider_name": "ColoCrossing",
+    "name": "CC-DAL-01",
+    "plan": "VPS Starter",
+    "location": "Dallas, TX",
+    "operating_system": "Ubuntu 22.04 LTS",
+    "status": "active",
+    "monthly_cost": "19.99",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "New server, warming up IPs"
+  },
+  {
+    "provider_name": "Mythic Beasts",
+    "name": "MB-LON-01",
+    "plan": "VPS 2GB",
+    "location": "London, UK",
+    "operating_system": "Debian 12",
+    "status": "active",
+    "monthly_cost": "18.00",
+    "currency": "GBP",
+    "billing_method": "monthly",
+    "notes": "UK-based for British campaigns"
+  },
+  {
+    "provider_name": "Hostnet",
+    "name": "HNL-AMS-01",
+    "plan": "VPS Medium",
+    "location": "Amsterdam, Netherlands",
+    "operating_system": "Ubuntu 22.04 LTS",
+    "status": "pending",
+    "monthly_cost": "25.00",
+    "currency": "EUR",
+    "billing_method": "monthly",
+    "notes": "Awaiting activation, provider just confirmed"
+  },
+  {
+    "provider_name": "BlueAngelHost",
+    "name": "BAH-NL-01",
+    "plan": "SSD VPS 4GB",
+    "location": "Netherlands",
+    "operating_system": "Ubuntu 20.04 LTS",
+    "status": "expired",
+    "monthly_cost": "12.99",
+    "currency": "USD",
+    "billing_method": "monthly",
+    "notes": "Expired last month, renewal pending"
+  }
+]

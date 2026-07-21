@@ -1,0 +1,74 @@
+[
+  {
+    "title": "Follow up with RackNerd on bounce rate issue",
+    "description": "Investigate high bounce rate on RNK-LAX-02 (6.6%). Need to contact RackNerd support about IP reputation and check if any blacklistings occurred.",
+    "provider_name": "RackNerd",
+    "priority": "high",
+    "status": "in_progress",
+    "due_date": "2026-07-21T00:00:00Z",
+    "related_entity_type": "server"
+  },
+  {
+    "title": "Request PTR configuration for ColoCrossing IP",
+    "description": "PTR record not yet configured for 192.227.180.164. Submit request to ColoCrossing support for rDNS setup: mail1.colocrossing.com",
+    "provider_name": "ColoCrossing",
+    "priority": "medium",
+    "status": "open",
+    "due_date": "2026-07-25T00:00:00Z",
+    "related_entity_type": "ip_address"
+  },
+  {
+    "title": "Send outreach email to Hostnet",
+    "description": "Hostnet VPS pending activation. Send follow-up email to confirm timeline for server delivery and port 25 availability.",
+    "provider_name": "Hostnet",
+    "priority": "medium",
+    "status": "open",
+    "due_date": "2026-07-23T00:00:00Z",
+    "related_entity_type": "provider"
+  },
+  {
+    "title": "Monitor ColoCrossing IP warming progress",
+    "description": "IP 192.227.180.164 warming started 2026-07-12. Day 1: 50 sends, 0 complaints. Track daily volume increase per warming schedule.",
+    "provider_name": "ColoCrossing",
+    "priority": "low",
+    "status": "open",
+    "due_date": "2026-08-01T00:00:00Z",
+    "related_entity_type": "ip_address"
+  },
+  {
+    "title": "Review BlueAngelHost renewal",
+    "description": "BAH-NL-01 expired on 2026-07-01. Decide whether to renew or retire. IPs were blocked, server performance was poor.",
+    "provider_name": "BlueAngelHost",
+    "priority": "low",
+    "status": "open",
+    "due_date": "2026-07-30T00:00:00Z",
+    "related_entity_type": "server"
+  },
+  {
+    "title": "Clean RackNerd email list for US campaigns",
+    "description": "High bounce rate suggests stale list data. Run email verification on US campaign lists before sending again.",
+    "provider_name": "RackNerd",
+    "priority": "high",
+    "status": "in_progress",
+    "due_date": "2026-07-20T00:00:00Z",
+    "related_entity_type": "server"
+  },
+  {
+    "title": "Update provider scoring for Hexabyte",
+    "description": "Hexabyte has 2 active servers, 7 IPs, excellent delivery rates. Update score to reflect high-performing provider status.",
+    "provider_name": "Hexabyte",
+    "priority": "low",
+    "status": "completed",
+    "due_date": "2026-07-15T00:00:00Z",
+    "related_entity_type": "provider"
+  },
+  {
+    "title": "Contact Clouding about port 25 for additional IPs",
+    "description": "Current port 25 is working well. Request opening for potential additional IPs if we scale Spain campaigns.",
+    "provider_name": "Clouding",
+    "priority": "medium",
+    "status": "open",
+    "due_date": "2026-07-28T00:00:00Z",
+    "related_entity_type": "provider"
+  }
+]

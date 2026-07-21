@@ -1,5 +1,16 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Ubuntu Deployment
+
+For the production server at `cloud.alphalink.it.com`, use the automated installer:
+
+```bash
+chmod +x scripts/install-ubuntu.sh
+LETSENCRYPT_EMAIL="admin@alphalink.it.com" ./scripts/install-ubuntu.sh
+```
+
+Full instructions are in [docs/ubuntu-deployment.md](docs/ubuntu-deployment.md).
+
 ## Getting Started
 
 First, run the development server:

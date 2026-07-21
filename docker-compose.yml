@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudops-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-cloudops_crm}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
+      - CRON_API_KEY=${CRON_API_KEY:-cloudops-cron-key-change-me}
+      - EMAIL_WEBHOOK_SECRET=${EMAIL_WEBHOOK_SECRET:-}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@cloudops.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      - GMAIL_IMAP_HOST=${GMAIL_IMAP_HOST:-imap.gmail.com}
+      - GMAIL_IMAP_PORT=${GMAIL_IMAP_PORT:-993}
+      - GMAIL_ADDRESS=${GMAIL_ADDRESS:-}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD:-}
+      - MXTOOLBOX_API_KEY=${MXTOOLBOX_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cloudops
+
+  # Cron service for server inactivity checks (every 30 minutes)
+  cron:
+    image: curlimages/curl:latest
+    container_name: cloudops-cron
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "Cron service started. Running inactivity check every 30 minutes."
+        while true; do
+          sleep 1800
+          curl -s -H "Authorization: Bearer $${CRON_API_KEY}" \
+            http://app:3000/api/cron/server-inactivity && \
+            echo "[$(date -Iseconds)] Inactivity check completed" || \
+            echo "[$(date -Iseconds)] Inactivity check failed"
+        done
+    environment:
+      - CRON_API_KEY=${CRON_API_KEY:-cloudops-cron-key-change-me}
+    depends_on:
+      - app
+    networks:
+      - cloudops
+
+  db:
+    image: postgres:16-alpine
+    container_name: cloudops-db
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-cloudops_crm}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cloudops
+
+volumes:
+  postgres_data:
+
+networks:
+  cloudops:
+    driver: bridge
