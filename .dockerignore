@@ -29,11 +29,13 @@ docker-compose*.yml
 *.md
 LICENSE
 
-# Data files (seeded into DB at startup)
-data/
+# Seed data required by scripts/docker-entrypoint.sh
+!data/
+!data/*.json
 
-# Scripts (not needed in container)
-scripts/
+# Runtime script required by the production image
+scripts/*
+!scripts/docker-entrypoint.sh
 
 # OS
 .DS_Store
