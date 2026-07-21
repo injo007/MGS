@@ -55,6 +55,26 @@ ensure_env() {
   fi
 }
 
+cert_fullchain_path() {
+  printf '/etc/letsencrypt/live/%s/fullchain.pem' "$DOMAIN"
+}
+
+cert_privkey_path() {
+  printf '/etc/letsencrypt/live/%s/privkey.pem' "$DOMAIN"
+}
+
+certificate_is_valid() {
+  local cert
+  cert="$(cert_fullchain_path)"
+
+  [ -f "$cert" ] || return 1
+  openssl x509 -in "$cert" -noout -checkend 86400 >/dev/null 2>&1 || return 1
+  openssl x509 -in "$cert" -noout -ext subjectAltName 2>/dev/null | grep -Eq "DNS:${DOMAIN}([,[:space:]]|$)" && return 0
+  openssl x509 -in "$cert" -noout -subject 2>/dev/null | grep -Eq "CN[ =]+${DOMAIN}([,/]|$)" && return 0
+
+  return 1
+}
+
 install_docker() {
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     log "Docker and Docker Compose are already installed"
@@ -176,7 +196,49 @@ configure_nginx() {
   log "Configuring Nginx reverse proxy"
   local conf="/etc/nginx/sites-available/cloudops-crm.conf"
 
-  cat > "$conf" <<NGINX
+  if certificate_is_valid; then
+    cat > "$conf" <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAIN};
+
+    ssl_certificate $(cert_fullchain_path);
+    ssl_certificate_key $(cert_privkey_path);
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 120s;
+    }
+}
+NGINX
+  else
+    cat > "$conf" <<NGINX
 server {
     listen 80;
     listen [::]:80;
@@ -197,6 +259,7 @@ server {
     }
 }
 NGINX
+  fi
 
   ln -sf "$conf" /etc/nginx/sites-enabled/cloudops-crm.conf
   rm -f /etc/nginx/sites-enabled/default
@@ -211,9 +274,10 @@ issue_certificate() {
     return
   fi
 
-  if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-    log "HTTPS certificate already exists for ${DOMAIN}"
+  if certificate_is_valid; then
+    log "Valid HTTPS certificate already exists for ${DOMAIN}"
     certbot renew --quiet || warn "Certificate renewal check failed. Existing certificate was left unchanged."
+    configure_nginx
     return
   fi
 
@@ -230,7 +294,14 @@ issue_certificate() {
     certbot_args+=(--staging)
   fi
 
+  if [ -f "$(cert_fullchain_path)" ]; then
+    warn "An existing certificate file was found but it is not valid for ${DOMAIN}; forcing certificate renewal."
+    certbot_args+=(--force-renewal)
+  fi
+
   certbot "${certbot_args[@]}"
+  certificate_is_valid || fail "Certbot finished, but the certificate is still not valid for ${DOMAIN}."
+  configure_nginx
 }
 
 start_app() {

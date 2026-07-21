@@ -14,6 +14,8 @@ Open ports `80` and `443` on the server firewall/security group.
 
 If the DNS record is managed through Cloudflare, set `cloud.alphalink.it.com` to **DNS only** while running the installer. After Certbot installs the origin certificate successfully, you can enable the Cloudflare proxy again and use SSL/TLS mode **Full (strict)**.
 
+Cloudflare error `526 Invalid SSL certificate` means Cloudflare is reaching the server, but the origin certificate or Nginx HTTPS config is not valid for the domain. Re-run the latest installer with the Cloudflare record set to **DNS only** so it can renew the certificate and write the HTTPS server block.
+
 ## Install
 
 From the project folder on the Ubuntu server:
