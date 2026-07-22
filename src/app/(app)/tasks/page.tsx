@@ -22,6 +22,7 @@ interface TaskItem {
   status: string;
   relatedEntityType: string | null;
   relatedEntityId: string | null;
+  createdById: string;
   createdAt: string;
   assignedUserName: string | null;
 }
@@ -177,9 +178,10 @@ export default function TasksPage() {
   };
 
   const currentUserId = (session?.user as Record<string, unknown> | undefined)?.id;
-  const canUpdateStatus = (task: TaskItem) => admin || task.assignedUserId === currentUserId;
-  const canEditTask = () => admin;
-  const canDeleteTask = () => admin;
+  const ownsTask = (task: TaskItem) => task.createdById === currentUserId;
+  const canUpdateStatus = (task: TaskItem) => admin || ownsTask(task) || task.assignedUserId === currentUserId;
+  const canEditTask = (task: TaskItem) => admin || ownsTask(task);
+  const canDeleteTask = (task: TaskItem) => admin || ownsTask(task);
 
   const filtered = data.filter((item) => {
     if (statusFilter && item.status !== statusFilter) return false;
@@ -334,7 +336,7 @@ export default function TasksPage() {
                         <button title="View" onClick={() => setViewingTask(task)} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#475569] hover:bg-[#F1F5F9]">
                           <Eye className="h-3.5 w-3.5" />
                         </button>
-                        {canEditTask() && (
+                        {canEditTask(task) && (
                           <button title="Edit" onClick={() => openEdit(task)} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#4F46E5] hover:bg-[#EEF2FF]">
                             <Edit className="h-3.5 w-3.5" />
                           </button>
@@ -353,7 +355,7 @@ export default function TasksPage() {
                             <PauseCircle className="h-3.5 w-3.5" />
                           </button>
                         ))}
-                        {canDeleteTask() && (
+                        {canDeleteTask(task) && (
                           <button title="Delete" onClick={() => deleteTask(task)} disabled={actionLoading === `${task.id}-delete`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -382,7 +384,7 @@ export default function TasksPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editingTask ? "Edit Task" : admin ? "Add Task / Notification" : "Add Task"}</DialogTitle>
-            <DialogDescription>{admin ? "Leave assignment public to notify every user, or assign it to one user only." : "Create or update a task assigned to you."}</DialogDescription>
+            <DialogDescription>{admin ? "Leave assignment public to notify every user, or assign it to one user only." : "Create and manage your personal tasks and notes."}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">

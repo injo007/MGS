@@ -55,26 +55,48 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const updateData: Record<string, any> = { ...body, updatedAt: new Date() };
+  const currentUserId = sessionUserId(session);
+  const userOwnsTask = existing.createdById === currentUserId;
+  let updateData: Record<string, any> = { ...body, updatedAt: new Date() };
   if (!isAdmin(session)) {
-    if (existing.assignedUserId !== sessionUserId(session)) {
+    if (userOwnsTask) {
+      const allowedStatus = ["open", "in_progress", "blocked", "completed", "cancelled"];
+      if (body.status !== undefined && !allowedStatus.includes(body.status)) {
+        return NextResponse.json({ error: "Invalid task status" }, { status: 400 });
+      }
+      updateData = {
+        title: body.title !== undefined ? String(body.title).trim() : existing.title,
+        description: body.description !== undefined ? body.description || null : existing.description,
+        priority: body.priority !== undefined ? body.priority : existing.priority,
+        status: body.status !== undefined ? body.status : existing.status,
+        dueDate: body.dueDate !== undefined ? (body.dueDate ? new Date(body.dueDate) : null) : existing.dueDate,
+        assignedUserId: currentUserId,
+        relatedEntityType: existing.relatedEntityType,
+        relatedEntityId: existing.relatedEntityId,
+        createdById: existing.createdById,
+        updatedAt: new Date(),
+      };
+      if (!updateData.title) {
+        return NextResponse.json({ error: "Title is required" }, { status: 400 });
+      }
+    } else if (existing.assignedUserId !== currentUserId) {
       return forbidden("You can only update the status of tasks assigned to you.");
-    }
+    } else {
+      const allowedStatus = ["open", "in_progress", "blocked", "completed", "cancelled"];
+      if (Object.keys(body).some((key) => key !== "status") || !allowedStatus.includes(body.status)) {
+        return forbidden("Only task owners and admins can edit task details.");
+      }
 
-    const allowedStatus = ["open", "in_progress", "blocked", "completed", "cancelled"];
-    if (Object.keys(body).some((key) => key !== "status") || !allowedStatus.includes(body.status)) {
-      return forbidden("Only admins can edit task details.");
+      updateData.status = body.status;
+      updateData.assignedUserId = existing.assignedUserId;
+      updateData.title = existing.title;
+      updateData.description = existing.description;
+      updateData.priority = existing.priority;
+      updateData.dueDate = existing.dueDate;
+      updateData.relatedEntityType = existing.relatedEntityType;
+      updateData.relatedEntityId = existing.relatedEntityId;
+      updateData.createdById = existing.createdById;
     }
-
-    updateData.status = body.status;
-    updateData.assignedUserId = existing.assignedUserId;
-    updateData.title = existing.title;
-    updateData.description = existing.description;
-    updateData.priority = existing.priority;
-    updateData.dueDate = existing.dueDate;
-    updateData.relatedEntityType = existing.relatedEntityType;
-    updateData.relatedEntityId = existing.relatedEntityId;
-    updateData.createdById = existing.createdById;
   }
 
   if (body.status === "completed" && existing.status !== "completed") {
@@ -118,8 +140,8 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (!isAdmin(session)) {
-    return forbidden("Only admins can delete tasks.");
+  if (!isAdmin(session) && existing.createdById !== sessionUserId(session)) {
+    return forbidden("Only admins and task owners can delete tasks.");
   }
 
   await db.delete(tasks).where(eq(tasks.id, id));
