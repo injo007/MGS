@@ -119,6 +119,57 @@ function money(value: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
 }
 
+function serverRowTone(status: string, selected: boolean) {
+  if (selected) return "bg-[#EEF2FF] hover:bg-[#E0E7FF]";
+  switch (status) {
+    case "active":
+      return "bg-[#F0FDF4] hover:bg-[#ECFDF5]";
+    case "pending":
+      return "bg-[#FFFBEB] hover:bg-[#FEF3C7]/60";
+    case "paused":
+      return "bg-[#F8FAFC] hover:bg-[#F1F5F9]";
+    case "public":
+      return "bg-[#EFF6FF] hover:bg-[#DBEAFE]/55";
+    case "port_closed":
+      return "bg-[#FFF7ED] hover:bg-[#FFEDD5]/65";
+    case "ts04_error":
+    case "bounce":
+    case "complaint":
+      return "bg-[#FFF1F2] hover:bg-[#FFE4E6]/65";
+    case "suspended":
+    case "cancelled":
+    case "expired":
+    case "down":
+      return "bg-[#FEF2F2] hover:bg-[#FEE2E2]/65";
+    default:
+      return "bg-white hover:bg-[#F8FAFC]";
+  }
+}
+
+function serverStatusSelectTone(status: string) {
+  switch (status) {
+    case "active":
+      return "border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D]";
+    case "pending":
+      return "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]";
+    case "public":
+      return "border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB]";
+    case "port_closed":
+      return "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]";
+    case "ts04_error":
+    case "bounce":
+    case "complaint":
+      return "border-[#FECDD3] bg-[#FFF1F2] text-[#BE123C]";
+    case "suspended":
+    case "cancelled":
+    case "expired":
+    case "down":
+      return "border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]";
+    default:
+      return "border-[#E5E7EB] bg-white text-[#374151]";
+  }
+}
+
 function dateLabel(value: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -253,7 +304,7 @@ function ServersPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const [providerFilter, setProviderFilter] = useState("all");
+  const providerFilter = searchParams.get("providerId") || "all";
   const [statusFilter, setStatusFilter] = useState("all");
   const [regionFilter, setRegionFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -303,12 +354,7 @@ function ServersPageContent() {
       )
     );
 
-  useEffect(() => {
-    setProviderFilter(searchParams.get("providerId") || "all");
-  }, [searchParams]);
-
   const updateProviderFilter = useCallback((value: string) => {
-    setProviderFilter(value);
     const params = new URLSearchParams(searchParams.toString());
     if (value === "all") params.delete("providerId");
     else params.set("providerId", value);
@@ -955,7 +1001,7 @@ function ServersPageContent() {
                   const meta = ipMeta(primaryIp);
                   const region = detectedRegion(server);
                   return (
-                    <tr key={server.id} className="border-b border-[#F1F5F9] transition-colors hover:bg-[#F8FAFC]">
+                    <tr key={server.id} className={`border-b border-[#F1F5F9] transition-colors ${serverRowTone(server.status, selectedRow)}`}>
                       <td className="px-4 py-3">
                         <button onClick={() => toggleRow(server.id)}>
                           {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
@@ -990,7 +1036,7 @@ function ServersPageContent() {
                           value={server.status}
                           onChange={(e) => saveStatus(server, e.target.value)}
                           disabled={savingStatuses[server.id]}
-                          className="h-[30px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#374151] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
+                          className={`h-[30px] rounded-[6px] border px-2 text-[12px] font-semibold outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60 ${serverStatusSelectTone(server.status)}`}
                         >
                           {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                         </select>

@@ -47,6 +47,7 @@ interface Provider {
   ipv6Available: boolean | null;
   mailServerAllowed: boolean | null;
   sendingRestrictions: string | null;
+  abusePolicyNotes: string | null;
   dailyLimit: number | null;
   hourlyLimit: number | null;
   startingPrice: string | null;
@@ -96,6 +97,26 @@ function formatMoney(value: string | null, currency = "USD") {
 function percent(numerator: number, denominator: number) {
   if (!denominator) return "0.0%";
   return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
+
+function providerRowTone(provider: Provider) {
+  if (provider.totalServers > 0) {
+    return "bg-[#F0FDF4] hover:bg-[#ECFDF5]";
+  }
+  if (provider.contactStatus === "contacted" || provider.responseStatus === "replied") {
+    return "bg-[#EEF2FF]/60 hover:bg-[#E0E7FF]/60";
+  }
+  if (provider.contactStatus === "follow_up_due" || provider.responseStatus === "needs_follow_up") {
+    return "bg-[#FFF7ED] hover:bg-[#FFEDD5]/70";
+  }
+  if (provider.contactStatus === "not_contacted" || provider.contactStatus === "ready_to_contact") {
+    return "bg-[#F8FAFC] hover:bg-[#F1F5F9]";
+  }
+  return "bg-white hover:bg-[#F8FAFC]";
+}
+
+function providerNote(provider: Provider) {
+  return provider.abusePolicyNotes || provider.sendingRestrictions || "—";
 }
 
 export default function ProvidersPage() {
@@ -375,7 +396,7 @@ export default function ProvidersPage() {
                   Port / PTR
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
-                  Mail Policy
+                  Note
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Limits
@@ -443,7 +464,7 @@ export default function ProvidersPage() {
                 providers.map((provider) => (
                   <tr
                     key={provider.id}
-                    className="group border-t border-[#F1F5F9] hover:bg-[#F8FAFC] transition-colors"
+                    className={`group border-t border-[#F1F5F9] transition-colors ${providerRowTone(provider)}`}
                   >
                     <td className="px-5 py-2.5">
                       <input
@@ -509,15 +530,8 @@ export default function ProvidersPage() {
                       </div>
                     </td>
                     <td className="px-3 py-2.5">
-                      {provider.mailServerAllowed === false || provider.decision === "prohibited_sending" || provider.port25Status === "blocked" ? (
-                        <span className="inline-flex rounded-[5px] bg-[#FEF2F2] px-2 py-0.5 text-[11px] font-semibold text-[#DC2626]">Prohibited</span>
-                      ) : provider.mailServerAllowed === true || provider.port25Status === "available" ? (
-                        <span className="inline-flex rounded-[5px] bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-semibold text-[#15803D]">Allowed</span>
-                      ) : (
-                        <span className="inline-flex rounded-[5px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#4B5563]">Unknown</span>
-                      )}
-                      <p className="mt-1 max-w-[130px] truncate text-[11px] text-[#9CA3AF]" title={provider.sendingRestrictions || ""}>
-                        {provider.sendingRestrictions || "No notes"}
+                      <p className="max-w-[170px] truncate text-[12px] font-medium text-[#374151]" title={providerNote(provider)}>
+                        {providerNote(provider)}
                       </p>
                     </td>
                     <td className="px-3 py-2.5">

@@ -93,6 +93,8 @@ interface ProviderRow {
   responseStatus: string | null;
   decision: string;
   mailServerAllowed: boolean | null;
+  sendingRestrictions: string | null;
+  abusePolicyNotes: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
   lastContactDate: string | null;
@@ -251,6 +253,10 @@ function providerNeedsAction(provider: ProviderRow) {
 function displayProviderStatus(provider: ProviderRow) {
   if (isReadyToContact(provider)) return "ready_to_contact";
   return provider.contactStatus;
+}
+
+function providerNote(provider: ProviderRow) {
+  return provider.abusePolicyNotes || provider.sendingRestrictions || "-";
 }
 
 export default function DashboardPage() {
@@ -587,7 +593,7 @@ export default function DashboardPage() {
                     Status
                   </th>
                   <th className="text-left text-[12px] font-semibold text-[#4B5563] px-3 py-3 uppercase tracking-[0.03em]">
-                    Mail Policy
+                    Note
                   </th>
                   <th className="text-left text-[12px] font-semibold text-[#4B5563] px-3 py-3 uppercase tracking-[0.03em]">
                     Owned
@@ -647,19 +653,9 @@ export default function DashboardPage() {
                         <StatusBadge value={displayProviderStatus(p)} />
                       </td>
                       <td className="px-3 py-3">
-                        {p.mailServerAllowed === false ? (
-                          <span className="inline-flex items-center gap-1 text-[13px] text-[#DC2626]">
-                            <XCircle className="h-3.5 w-3.5" />
-                            Prohibited
-                          </span>
-                        ) : p.mailServerAllowed === true ? (
-                          <span className="inline-flex items-center gap-1 text-[13px] text-[#15803D]">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Allowed
-                          </span>
-                        ) : (
-                          <span className="text-[13px] text-[#6B7280]">Unknown</span>
-                        )}
+                        <p className="max-w-[160px] truncate text-[13px] font-medium text-[#374151]" title={providerNote(p)}>
+                          {providerNote(p)}
+                        </p>
                       </td>
                       <td className="px-3 py-3">
                         {p.assignedUserId ? (
