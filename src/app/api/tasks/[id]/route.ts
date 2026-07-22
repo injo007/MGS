@@ -54,15 +54,28 @@ export async function PUT(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (!isAdmin(session) && existing.assignedUserId !== sessionUserId(session)) {
-    return forbidden("You can only edit tasks assigned to you.");
-  }
-  if (!isAdmin(session) && body.assignedUserId && body.assignedUserId !== sessionUserId(session)) {
-    return forbidden("You can only assign tasks to yourself.");
-  }
 
   const updateData: Record<string, any> = { ...body, updatedAt: new Date() };
-  if (!isAdmin(session)) updateData.assignedUserId = sessionUserId(session);
+  if (!isAdmin(session)) {
+    if (existing.assignedUserId !== sessionUserId(session)) {
+      return forbidden("You can only update the status of tasks assigned to you.");
+    }
+
+    const allowedStatus = ["open", "in_progress", "blocked", "completed", "cancelled"];
+    if (Object.keys(body).some((key) => key !== "status") || !allowedStatus.includes(body.status)) {
+      return forbidden("Only admins can edit task details.");
+    }
+
+    updateData.status = body.status;
+    updateData.assignedUserId = existing.assignedUserId;
+    updateData.title = existing.title;
+    updateData.description = existing.description;
+    updateData.priority = existing.priority;
+    updateData.dueDate = existing.dueDate;
+    updateData.relatedEntityType = existing.relatedEntityType;
+    updateData.relatedEntityId = existing.relatedEntityId;
+    updateData.createdById = existing.createdById;
+  }
 
   if (body.status === "completed" && existing.status !== "completed") {
     updateData.completedAt = new Date();
@@ -105,8 +118,8 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (!isAdmin(session) && existing.assignedUserId !== sessionUserId(session)) {
-    return forbidden("You can only delete tasks assigned to you.");
+  if (!isAdmin(session)) {
+    return forbidden("Only admins can delete tasks.");
   }
 
   await db.delete(tasks).where(eq(tasks.id, id));

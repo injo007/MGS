@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { CheckCircle2, Edit, ListTodo, Loader2, PauseCircle, PlayCircle, Plus, Search, Trash2 } from "lucide-react";
+import { CheckCircle2, Edit, Eye, ListTodo, Loader2, PauseCircle, PlayCircle, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface TaskItem {
@@ -48,6 +48,7 @@ export default function TasksPage() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+  const [viewingTask, setViewingTask] = useState<TaskItem | null>(null);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -175,7 +176,10 @@ export default function TasksPage() {
     }
   };
 
-  const canManageTask = (task: TaskItem) => admin || task.assignedUserId === (session?.user as Record<string, unknown> | undefined)?.id;
+  const currentUserId = (session?.user as Record<string, unknown> | undefined)?.id;
+  const canUpdateStatus = (task: TaskItem) => admin || task.assignedUserId === currentUserId;
+  const canEditTask = () => admin;
+  const canDeleteTask = () => admin;
 
   const filtered = data.filter((item) => {
     if (statusFilter && item.status !== statusFilter) return false;
@@ -326,32 +330,35 @@ export default function TasksPage() {
                       {new Date(task.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-2.5">
-                      {canManageTask(task) ? (
-                        <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1">
+                        <button title="View" onClick={() => setViewingTask(task)} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#475569] hover:bg-[#F1F5F9]">
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                        {canEditTask() && (
                           <button title="Edit" onClick={() => openEdit(task)} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#4F46E5] hover:bg-[#EEF2FF]">
                             <Edit className="h-3.5 w-3.5" />
                           </button>
-                          {task.status !== "completed" && (
-                            <button title="Complete" onClick={() => updateTaskStatus(task, "completed")} disabled={actionLoading === `${task.id}-completed`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#16A34A] hover:bg-[#ECFDF5] disabled:opacity-50">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          {task.status === "blocked" ? (
-                            <button title="Reopen" onClick={() => updateTaskStatus(task, "open")} disabled={actionLoading === `${task.id}-open`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#4F46E5] hover:bg-[#EEF2FF] disabled:opacity-50">
-                              <PlayCircle className="h-3.5 w-3.5" />
-                            </button>
-                          ) : task.status !== "completed" && (
-                            <button title="Pause / Block" onClick={() => updateTaskStatus(task, "blocked")} disabled={actionLoading === `${task.id}-blocked`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#EA580C] hover:bg-[#FFF7ED] disabled:opacity-50">
-                              <PauseCircle className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                        )}
+                        {canUpdateStatus(task) && task.status !== "completed" && (
+                          <button title="Complete" onClick={() => updateTaskStatus(task, "completed")} disabled={actionLoading === `${task.id}-completed`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#16A34A] hover:bg-[#ECFDF5] disabled:opacity-50">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {canUpdateStatus(task) && (task.status === "blocked" ? (
+                          <button title="Reopen" onClick={() => updateTaskStatus(task, "open")} disabled={actionLoading === `${task.id}-open`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#4F46E5] hover:bg-[#EEF2FF] disabled:opacity-50">
+                            <PlayCircle className="h-3.5 w-3.5" />
+                          </button>
+                        ) : task.status !== "completed" && (
+                          <button title="Pause / Block" onClick={() => updateTaskStatus(task, "blocked")} disabled={actionLoading === `${task.id}-blocked`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#EA580C] hover:bg-[#FFF7ED] disabled:opacity-50">
+                            <PauseCircle className="h-3.5 w-3.5" />
+                          </button>
+                        ))}
+                        {canDeleteTask() && (
                           <button title="Delete" onClick={() => deleteTask(task)} disabled={actionLoading === `${task.id}-delete`} className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                        </div>
-                      ) : (
-                        <span className="block text-right text-[12px] text-[#9CA3AF]">View only</span>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -450,6 +457,62 @@ export default function TasksPage() {
             <button className="h-[34px] rounded-[7px] bg-[#4F46E5] hover:bg-[#4338CA] px-3.5 text-[13px] font-medium text-white" onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
               {editingTask ? "Save Changes" : "Create Task"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewingTask} onOpenChange={(open) => { if (!open) setViewingTask(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{viewingTask?.title || "Task"}</DialogTitle>
+            <DialogDescription>Task details and current assignment</DialogDescription>
+          </DialogHeader>
+          {viewingTask && (
+            <div className="space-y-4 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={priorityStyles[viewingTask.priority] || priorityStyles.medium}>
+                  {viewingTask.priority.charAt(0).toUpperCase() + viewingTask.priority.slice(1)}
+                </span>
+                <StatusBadge value={viewingTask.status} label={viewingTask.status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} />
+                <span className="inline-flex items-center rounded-[5px] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-medium text-[#64748B]">
+                  {viewingTask.assignedUserName || "Public"}
+                </span>
+              </div>
+              <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+                <p className="text-[12px] font-semibold uppercase tracking-wide text-[#64748B]">Description</p>
+                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-[#111827]">
+                  {viewingTask.description || "No description provided."}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-[13px] max-sm:grid-cols-1">
+                <div>
+                  <p className="text-[12px] font-medium text-[#64748B]">Due Date</p>
+                  <p className="mt-0.5 text-[#111827]">{viewingTask.dueDate ? new Date(viewingTask.dueDate).toLocaleDateString() : "No due date"}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-medium text-[#64748B]">Created</p>
+                  <p className="mt-0.5 text-[#111827]">{new Date(viewingTask.createdAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-medium text-[#64748B]">Related Type</p>
+                  <p className="mt-0.5 text-[#111827]">{viewingTask.relatedEntityType || "None"}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] font-medium text-[#64748B]">Related ID</p>
+                  <p className="mt-0.5 break-all text-[#111827]">{viewingTask.relatedEntityId || "None"}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            {viewingTask && canUpdateStatus(viewingTask) && viewingTask.status !== "completed" && (
+              <button className="h-[34px] rounded-[7px] bg-[#16A34A] px-3.5 text-[13px] font-medium text-white hover:bg-[#15803D]" onClick={() => { updateTaskStatus(viewingTask, "completed"); setViewingTask(null); }}>
+                Mark Completed
+              </button>
+            )}
+            <button className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3.5 text-[13px] font-medium text-[#374151] hover:bg-[#F9FAFB]" onClick={() => setViewingTask(null)}>
+              Close
             </button>
           </DialogFooter>
         </DialogContent>
