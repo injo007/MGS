@@ -96,6 +96,7 @@ interface DashboardStats {
       emailCount: number;
       mailboxCount: number;
       lastContactAt: string | null;
+      source: string;
     }[];
     weeklySending: {
       userId: string;
@@ -359,6 +360,8 @@ export default function DashboardPage() {
   const weeklySendingLeaders = stats?.userRankings?.weeklySending ?? [];
   const maxProviderContacts = Math.max(1, ...providerContactLeaders.map((user) => user.providerCount));
   const maxWeeklySends = Math.max(1, ...weeklySendingLeaders.map((user) => user.totalSends));
+  const totalRankedProviders = providerContactLeaders.reduce((sum, user) => sum + user.providerCount, 0);
+  const totalRankedSends = weeklySendingLeaders.reduce((sum, user) => sum + user.totalSends, 0);
 
   const chartTooltipStyle = {
     borderRadius: "8px",
@@ -590,7 +593,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[1.35fr_1fr]">
+      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[1.35fr_1fr]">
         {/* Providers Requiring Action */}
         <div className="bg-white rounded-[10px] border border-[#E5E7EB]">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -729,7 +732,7 @@ export default function DashboardPage() {
         </div>
 
         {/* User Performance Rankings */}
-        <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex h-full flex-col rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -737,7 +740,7 @@ export default function DashboardPage() {
                 <h3 className="text-[15px] font-semibold text-[#111827]">User Performance Rankings</h3>
               </div>
               <p className="mt-1 text-[12px] text-[#6B7280]">
-                Provider contacts from cached inbox conversations and sends from this week.
+                Provider contacts from saved email conversations and sends from this week.
               </p>
             </div>
             <span className="shrink-0 rounded-[999px] border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-[#475569]">
@@ -745,7 +748,18 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div className="grid gap-4 2xl:grid-cols-2">
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Ranked Providers</p>
+              <p className="mt-1 text-[22px] font-bold leading-none text-[#111827]">{loading ? "..." : compactNumber(totalRankedProviders)}</p>
+            </div>
+            <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Weekly Sends</p>
+              <p className="mt-1 text-[22px] font-bold leading-none text-[#111827]">{loading ? "..." : compactNumber(totalRankedSends)}</p>
+            </div>
+          </div>
+
+          <div className="grid flex-1 content-start gap-4">
             <div className="min-w-0">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -765,9 +779,9 @@ export default function DashboardPage() {
                     </div>
                   ))
                 ) : providerContactLeaders.length === 0 ? (
-                  <div className="rounded-[8px] border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-3 py-6 text-center">
+                  <div className="rounded-[8px] border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-3 py-8 text-center">
                     <p className="text-[13px] font-medium text-[#475569]">No sent provider conversations found</p>
-                    <p className="mt-1 text-[12px] text-[#94A3B8]">Sync sent mailboxes to build this ranking.</p>
+                    <p className="mt-1 text-[12px] text-[#94A3B8]">Sync sent mailboxes or apply saved emails to providers.</p>
                   </div>
                 ) : providerContactLeaders.slice(0, 5).map((user, index) => (
                   <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
@@ -787,7 +801,7 @@ export default function DashboardPage() {
                           <div className="h-full rounded-full bg-[#0891B2]" style={{ width: `${Math.max(6, (user.providerCount / maxProviderContacts) * 100)}%` }} />
                         </div>
                         <p className="mt-1 text-[11px] text-[#6B7280]">
-                          {compactNumber(user.emailCount)} sent emails · {user.mailboxCount} mailbox{user.mailboxCount === 1 ? "" : "es"}
+                          {compactNumber(user.emailCount)} emails · {user.source}
                         </p>
                       </div>
                     </div>

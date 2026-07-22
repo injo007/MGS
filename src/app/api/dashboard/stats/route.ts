@@ -86,6 +86,7 @@ export async function GET(request: Request) {
     serverUtilization,
     allUsers,
     currentWeekSendingByUser,
+    providerContactOutreachRows,
     imapAccounts,
     cachedInbox,
   ] = await Promise.all([
@@ -237,6 +238,26 @@ export async function GET(request: Request) {
       .orderBy(sql`coalesce(sum(${sendingLogs.actualSends}), 0) desc`)
       .limit(8),
 
+    db
+      .select({
+        userId: outreachLogs.sentById,
+        userName: users.name,
+        userEmail: users.email,
+        providerIds: sql<string[]>`array_agg(distinct ${outreachLogs.providerId})`,
+        emailCount: sql<number>`count(*)::int`,
+        lastContactAt: max(outreachLogs.date),
+      })
+      .from(outreachLogs)
+      .leftJoin(users, eq(outreachLogs.sentById, users.id))
+      .where(
+        scopedUserId
+          ? and(eq(outreachLogs.channel, "email"), eq(outreachLogs.sentById, scopedUserId))
+          : eq(outreachLogs.channel, "email")
+      )
+      .groupBy(outreachLogs.sentById, users.name, users.email)
+      .orderBy(sql`count(distinct ${outreachLogs.providerId}) desc`, sql`count(*) desc`)
+      .limit(8),
+
     getImapConfigs(undefined, true),
 
     getCachedImapInbox(),
@@ -279,6 +300,24 @@ export async function GET(request: Request) {
     }
   }
 
+  for (const item of providerContactOutreachRows) {
+    if (!item.userId) continue;
+    if (!providerContactsByUser.has(item.userId)) {
+      providerContactsByUser.set(item.userId, {
+        providerIds: new Set(),
+        emailCount: 0,
+        mailboxes: new Set(),
+        lastContactAt: null,
+      });
+    }
+    const row = providerContactsByUser.get(item.userId)!;
+    for (const providerId of item.providerIds || []) row.providerIds.add(providerId);
+    row.emailCount = Math.max(row.emailCount, Number(item.emailCount || 0));
+    if (!row.lastContactAt || (item.lastContactAt && item.lastContactAt.getTime() > new Date(row.lastContactAt).getTime())) {
+      row.lastContactAt = item.lastContactAt?.toISOString() || row.lastContactAt;
+    }
+  }
+
   const providerContactLeaderboard = Array.from(providerContactsByUser.entries())
     .map(([userId, value]) => {
       const profile = usersById.get(userId);
@@ -290,6 +329,7 @@ export async function GET(request: Request) {
         emailCount: value.emailCount,
         mailboxCount: value.mailboxes.size,
         lastContactAt: value.lastContactAt,
+        source: value.mailboxes.size > 0 ? "Inbox + CRM logs" : "CRM email logs",
       };
     })
     .sort((a, b) => b.providerCount - a.providerCount || b.emailCount - a.emailCount)
