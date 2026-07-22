@@ -69,11 +69,11 @@ async function getSettingValue(key: string): Promise<string> {
 }
 
 export async function getTelegramBotToken(): Promise<string> {
-  return process.env.TELEGRAM_BOT_TOKEN || await getSettingValue("telegram_bot_token");
+  return await getSettingValue("telegram_bot_token") || process.env.TELEGRAM_BOT_TOKEN || "";
 }
 
 export async function getTelegramAlertChatId(): Promise<string> {
-  return process.env.TELEGRAM_ALERT_CHAT_ID || await getSettingValue("telegram_alert_chat_id");
+  return await getSettingValue("telegram_alert_chat_id") || process.env.TELEGRAM_ALERT_CHAT_ID || "";
 }
 
 async function telegramFetch(path: string, options?: RequestInit, tokenOverride?: string): Promise<Response> {

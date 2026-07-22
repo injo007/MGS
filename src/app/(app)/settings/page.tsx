@@ -113,6 +113,7 @@ export default function SettingsPage() {
   const [testingAI, setTestingAI] = useState(false);
   const [settingWebhook, setSettingWebhook] = useState(false);
   const [sendingTestMsg, setSendingTestMsg] = useState(false);
+  const [sendingAuditTest, setSendingAuditTest] = useState(false);
 
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
@@ -415,11 +416,38 @@ export default function SettingsPage() {
         description: "Check your Telegram for the test message.",
       });
     } catch (err: any) {
+      const message = String(err.message || "");
       toast.error("Failed to send test message", {
-        description: err.message,
+        description: message.includes("chat not found")
+          ? "Telegram cannot find this chat. Open the bot, send /start then /chatid, and use the returned Chat ID."
+          : message,
       });
     } finally {
       setSendingTestMsg(false);
+    }
+  }
+
+  async function sendAuditTestTelegramMessage() {
+    setSendingAuditTest(true);
+    try {
+      const res = await fetch("/api/webhooks/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send_audit_test" }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      toast.success("Audit alert test sent", {
+        description: "This uses the same path as login and create/delete alerts.",
+      });
+    } catch (err: any) {
+      toast.error("Failed to send audit alert test", {
+        description: err.message || "Could not send the audit alert test.",
+      });
+    } finally {
+      setSendingAuditTest(false);
     }
   }
 
@@ -844,7 +872,7 @@ export default function SettingsPage() {
                     onChange={(e) => update("telegram_alert_chat_id", e.target.value)}
                   />
                   <p className="text-[13px] text-[#6B7280]">
-                    Used for user logins and user/provider/server/IP create-delete alerts. The test message uses this chat when Test Chat ID is empty.
+                    Used for user logins and user/provider/server/IP create-delete alerts. Message the bot first, then send /chatid and copy the returned ID here.
                   </p>
                 </div>
 
@@ -868,6 +896,14 @@ export default function SettingsPage() {
                   >
                     {sendingTestMsg ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin inline" /> : <MessageSquare className="h-3.5 w-3.5 mr-2 inline" />}
                     {sendingTestMsg ? "Sending..." : "Send Test Message"}
+                  </button>
+                  <button
+                    onClick={sendAuditTestTelegramMessage}
+                    disabled={sendingAuditTest}
+                    className="h-[34px] rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] px-3 text-[13px] font-medium text-[#4338CA] hover:bg-[#E0E7FF] transition-colors disabled:opacity-50"
+                  >
+                    {sendingAuditTest ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin inline" /> : <Bell className="h-3.5 w-3.5 mr-2 inline" />}
+                    {sendingAuditTest ? "Sending..." : "Send Audit Alert Test"}
                   </button>
                 </div>
               </div>

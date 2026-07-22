@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { providers, tasks, auditLogs } from "@/db/schema";
 import { count, desc, eq } from "drizzle-orm";
-import { sendTelegramMessage, parseTelegramUpdate, setTelegramWebhook } from "@/lib/telegram";
+import { sendAuditTelegramAlert, sendTelegramMessage, parseTelegramUpdate, setTelegramWebhook } from "@/lib/telegram";
 import { isAdmin } from "@/lib/access-control";
 
 export async function POST(request: Request) {
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
     const rawUpdate = await request.json();
 
-    if (rawUpdate?.action === "send_test" || rawUpdate?.url) {
+    if (rawUpdate?.action === "send_test" || rawUpdate?.action === "send_audit_test" || rawUpdate?.url) {
       const session = await auth();
       if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       if (!isAdmin(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -21,6 +21,18 @@ export async function POST(request: Request) {
       if (rawUpdate.action === "send_test") {
         if (!rawUpdate.chat_id) return NextResponse.json({ error: "chat_id is required" }, { status: 400 });
         await sendTelegramMessage(String(rawUpdate.chat_id), rawUpdate.text || "Test message from CloudOps CRM");
+        return NextResponse.json({ ok: true });
+      }
+
+      if (rawUpdate.action === "send_audit_test") {
+        await sendAuditTelegramAlert({
+          action: "create",
+          entityType: "server",
+          actorName: session.user.name,
+          actorEmail: session.user.email,
+          entityName: "Telegram audit alert test",
+          entityDetail: "Settings test",
+        });
         return NextResponse.json({ ok: true });
       }
 
@@ -50,16 +62,24 @@ export async function POST(request: Request) {
 
     switch (cmd) {
       case "/start":
-        responseText = "Welcome to CloudOps CRM Bot! I can provide you with CRM stats and updates.\n\nType /help to see available commands.";
+        responseText = "Welcome to CloudOps CRM Bot! I can provide you with CRM stats and updates.\n\nUse /chatid to get the exact chat ID for CRM alerts.\n\nType /help to see available commands.";
         break;
 
       case "/help":
         responseText = "Available commands:\n\n"
           + "/start - Welcome message\n"
           + "/help - Show this help\n"
+          + "/chatid - Show this chat ID for alert setup\n"
           + "/stats - Show CRM dashboard statistics\n"
           + "/providers - List last 10 providers\n"
           + "/tasks - List last 10 open tasks";
+        break;
+
+      case "/chatid":
+        responseText = "Telegram alert setup:\n\n"
+          + `Chat ID: \`${chatId}\`\n`
+          + `Chat type: ${parsed.chatType}\n\n`
+          + "Copy this Chat ID into Settings > Telegram Bot > Alert Chat ID.";
         break;
 
       case "/stats": {
