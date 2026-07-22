@@ -13,6 +13,7 @@ import {
 import { eq, or, sql } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 import { forbidden, isAdmin } from "@/lib/access-control";
+import { SERVER_STATUSES } from "@/lib/constants";
 
 interface ImportRequest {
   rows: Record<string, any>[];
@@ -80,7 +81,7 @@ function validateRow(
   }
 
   if (entity === "servers" && row.status) {
-    const valid = ["pending", "active", "paused", "suspended", "cancelled", "expired"];
+    const valid: readonly string[] = SERVER_STATUSES.map((status) => status.value);
     if (!valid.includes(row.status)) {
       errors.push(`Invalid server status: ${row.status}`);
     }

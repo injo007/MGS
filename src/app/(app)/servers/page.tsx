@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { ProviderLogo } from "@/components/shared/provider-logo";
+import { SERVER_STATUSES } from "@/lib/constants";
 import {
   CalendarClock,
   CheckSquare,
@@ -106,7 +107,6 @@ interface UserOption {
 }
 
 const PAGE_SIZE = 10;
-const STATUSES = ["pending", "active", "paused", "suspended", "cancelled", "expired", "down", "port_closed", "ts04_error", "complaint"];
 const TABS = [
   { key: "all", label: "All Servers" },
   { key: "expiring", label: "Expiring Soon" },
@@ -778,7 +778,7 @@ function ServersPageContent() {
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
             <option value="all">All Statuses</option>
-            {STATUSES.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
+            {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
           </select>
           <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
             <option value="all">All Regions</option>
@@ -868,6 +868,8 @@ function ServersPageContent() {
             <option value="active">Mark active</option>
             <option value="paused">Pause</option>
             <option value="suspended">Suspend</option>
+            <option value="ts04_error">Mark TSS04</option>
+            <option value="bounce">Mark Bounce</option>
           </select>
           <button
             disabled={selected.length === 0 || deletingStatistics}
@@ -962,7 +964,7 @@ function ServersPageContent() {
                           disabled={savingStatuses[server.id]}
                           className="h-[30px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#374151] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
                         >
-                          {STATUSES.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
+                          {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-3">
@@ -1110,7 +1112,7 @@ function ServersPageContent() {
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
               Status
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]">
-                {STATUSES.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
+                {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
               </select>
             </label>
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">

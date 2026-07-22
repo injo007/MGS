@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ProviderLogo } from "@/components/shared/provider-logo";
+import { SERVER_STATUSES } from "@/lib/constants";
 import {
   Dialog,
   DialogContent,
@@ -1643,12 +1644,9 @@ export default function ProviderDetailPage({
                 onChange={(e) => setServerStatus(e.target.value)}
                 className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
               >
-                <option value="pending">Pending</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="suspended">Suspended</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="expired">Expired</option>
+                {SERVER_STATUSES.map((status) => (
+                  <option key={status.value} value={status.value}>{status.label}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-1.5">

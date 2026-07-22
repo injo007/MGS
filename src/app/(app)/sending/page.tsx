@@ -121,7 +121,7 @@ const LIMIT_FIELDS: { label: string; key: DrawerTextKey }[] = [
 
 const GUARDRAIL_FIELDS: { label: string; key: DrawerTextKey }[] = [
   { label: "Bounce Threshold %", key: "bounceThreshold" },
-  { label: "TS04 Threshold %", key: "ts04Threshold" },
+  { label: "TSS04 Threshold %", key: "ts04Threshold" },
   { label: "Complaint Threshold %", key: "complaintThreshold" },
   { label: "Deferral Threshold %", key: "deferralThreshold" },
 ];
@@ -190,7 +190,7 @@ function warmupStage(server: ServerRow) {
 
 function sendingStatus(server: ServerRow, bounceRate: number, ts04Rate: number) {
   if (["paused", "cancelled", "expired"].includes(server.status)) return "paused";
-  if (["suspended", "down", "port_closed", "ts04_error", "complaint"].includes(server.status)) return "restricted";
+  if (["suspended", "down", "port_closed", "ts04_error", "bounce", "complaint"].includes(server.status)) return "restricted";
   if (bounceRate > 3 || ts04Rate > 1) return "restricted";
   if (warmupStage(server).startsWith("Stage")) return "warmup";
   return "active";
@@ -325,7 +325,8 @@ export default function SendingPage() {
       if (!byServer[log.serverId]) byServer[log.serverId] = { complaints: 0, unsubscribes: 0, ts04: 0, lastUpdated: null };
       byServer[log.serverId].complaints += Number(log.complaints || 0);
       byServer[log.serverId].unsubscribes += Number(log.unsubscribes || 0);
-      if (log.operationalStatus === "watch" || log.deliveryNotes?.toLowerCase().includes("ts04")) {
+      const deliveryNotes = log.deliveryNotes?.toLowerCase() || "";
+      if (log.operationalStatus === "watch" || deliveryNotes.includes("ts04") || deliveryNotes.includes("tss04")) {
         byServer[log.serverId].ts04 += Math.max(1, Math.round(Number(log.bounces || 0) * 0.4));
       }
       if (!byServer[log.serverId].lastUpdated || new Date(log.date) > new Date(byServer[log.serverId].lastUpdated!)) {
@@ -495,7 +496,7 @@ export default function SendingPage() {
 
   const errorBreakdown = [
     { name: "Bounce", value: totals.bounces, color: "#EF4444", rate: pct(totals.bounces, totals.actual, 2) },
-    { name: "TS04", value: totals.ts04, color: "#F97316", rate: pct(totals.ts04, totals.actual, 2) },
+    { name: "TSS04", value: totals.ts04, color: "#F97316", rate: pct(totals.ts04, totals.actual, 2) },
     { name: "Complaints", value: totals.complaints, color: "#8B5CF6", rate: pct(totals.complaints, totals.actual, 2) },
     { name: "Deferrals", value: Math.round(totals.bounces * 0.2), color: "#2563EB", rate: pct(Math.round(totals.bounces * 0.2), totals.actual, 2) },
   ];
@@ -793,7 +794,7 @@ export default function SendingPage() {
       <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-start">
         <div>
           <h1 className="text-[24px] font-bold leading-tight tracking-tight text-[#111827]">Server Statistics Center</h1>
-          <p className="mt-1 text-[14px] text-[#6B7280]">Track daily server volumes, provider state, TS04 flags, bounce issues, and operational notes.</p>
+          <p className="mt-1 text-[14px] text-[#6B7280]">Track daily server volumes, provider state, TSS04 flags, bounce issues, and operational notes.</p>
         </div>
           <div className="flex items-center gap-2">
             <button
@@ -833,7 +834,7 @@ export default function SendingPage() {
         <KpiCard label="Today Volume" value={formatNumber(totals.sentToday)} sub={`${pct(totals.sentToday, totals.planned, 1)}% capacity`} icon={Activity} tone="blue" />
         <KpiCard label="Successful" value={formatNumber(totals.delivered)} sub={`${pct(totals.delivered, totals.actual, 1)}% rate`} icon={Mail} tone="green" />
         <KpiCard label="Bounce Rate" value={`${pct(totals.bounces, totals.actual, 2)}%`} sub={`${totals.bounces} bounces`} icon={Target} tone="orange" />
-        <KpiCard label="TS04 Errors" value={`${pct(totals.ts04, totals.actual, 2)}%`} sub={`${totals.ts04} flagged`} icon={AlertTriangle} tone="red" />
+        <KpiCard label="TSS04" value={`${pct(totals.ts04, totals.actual, 2)}%`} sub={`${totals.ts04} flagged`} icon={AlertTriangle} tone="red" />
         <KpiCard label="Complaint Rate" value={`${pct(totals.complaints, totals.actual, 2)}%`} sub={`${totals.complaints} complaints`} icon={ShieldAlert} tone="violet" />
         <KpiCard label="Paused Servers" value={String(tabCount("paused"))} sub="manual or automatic" icon={Pause} tone="slate" />
       </div>
@@ -846,7 +847,7 @@ export default function SendingPage() {
               <button onClick={() => showAlertFilter("bounce")} className="text-[#4F46E5] hover:underline">View</button>
             </div>
             <div className={`flex items-center justify-between rounded-[8px] border px-4 py-3 text-[13px] font-semibold text-[#991B1B] ${alertFilter === "ts04" ? "border-[#DC2626] bg-[#FEE2E2] ring-2 ring-[#DC2626]/15" : "border-[#FECACA] bg-[#FEF2F2]"}`}>
-              <span>{enriched.filter((s) => s.ts04Rate > 1).length} servers flagged TS04</span>
+              <span>{enriched.filter((s) => s.ts04Rate > 1).length} servers flagged TSS04</span>
               <button onClick={() => showAlertFilter("ts04")} className="text-[#4F46E5] hover:underline">View</button>
             </div>
             <div className={`flex items-center justify-between rounded-[8px] border px-4 py-3 text-[13px] font-semibold text-[#92400E] ${alertFilter === "all" ? "border-[#F97316] bg-[#FFEDD5] ring-2 ring-[#F97316]/15" : "border-[#FED7AA] bg-[#FFF7ED]"}`}>
@@ -927,7 +928,7 @@ export default function SendingPage() {
             {alertFilter && (
               <div className="flex items-center justify-between border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2">
                 <p className="text-[12px] font-semibold text-[#374151]">
-                  Showing {alertFilter === "bounce" ? "servers over bounce threshold" : alertFilter === "ts04" ? "servers flagged TS04" : alertFilter === "capacity" ? "servers near daily capacity" : "all servers needing attention"}
+                  Showing {alertFilter === "bounce" ? "servers over bounce threshold" : alertFilter === "ts04" ? "servers flagged TSS04" : alertFilter === "capacity" ? "servers near daily capacity" : "all servers needing attention"}
                 </p>
                 <button
                   onClick={() => setAlertFilter(null)}
@@ -943,7 +944,7 @@ export default function SendingPage() {
                 <thead>
                   <tr className="border-b border-[#E5E7EB]">
                     <th className="w-10 px-4 py-3"></th>
-                    {["Server", "Provider", "Daily Volume Limit", "Today Volume", "Success Rate", "Bounce %", "TS04 %", "Complaints", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
+                    {["Server", "Provider", "Daily Volume Limit", "Today Volume", "Success Rate", "Bounce %", "TSS04 %", "Complaints", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
                       <th key={header} className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.03em] text-[#4B5563]">{header}</th>
                     ))}
                   </tr>
@@ -1359,7 +1360,7 @@ export default function SendingPage() {
                 {[
                   ["Status", drawerServer.status],
                   ["Bounce Rate", `${drawerServer.bounceRate.toFixed(1)}%`],
-                  ["TS04 %", `${drawerServer.ts04Rate.toFixed(1)}%`],
+                  ["TSS04 %", `${drawerServer.ts04Rate.toFixed(1)}%`],
                   ["Complaints", `${drawerServer.complaintRate.toFixed(2)}%`],
                   ["Today Volume", `${formatNumber(drawerServer.todaySends)} / ${formatNumber(drawerServer.limit)}`],
                 ].map(([label, value]) => (

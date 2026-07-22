@@ -38,6 +38,21 @@ export const PROVIDER_CATEGORIES = [
   "Other",
 ] as const;
 
+export const SERVER_STATUSES = [
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "paused", label: "Paused" },
+  { value: "suspended", label: "Suspended" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "expired", label: "Expired" },
+  { value: "public", label: "Public" },
+  { value: "down", label: "Down" },
+  { value: "port_closed", label: "Port Closed" },
+  { value: "ts04_error", label: "TSS04" },
+  { value: "bounce", label: "Bounce" },
+  { value: "complaint", label: "Complaint" },
+] as const;
+
 export const PROVIDER_STATUSES = {
   CONTACT_STATUS: [
     { value: "not_contacted", label: "Not Contacted", color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
