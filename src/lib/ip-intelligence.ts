@@ -37,6 +37,8 @@ type MxToolboxAccount = {
   enabled: boolean;
 };
 
+type MxToolboxAssignee = string | string[] | null | undefined;
+
 export type IpIntelligenceSnapshot = {
   ip: string;
   checkedAt: string;
@@ -307,18 +309,27 @@ async function getMxToolboxAccounts(): Promise<MxToolboxAccount[]> {
   return accounts.filter((account) => account.enabled);
 }
 
-async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: string | null) {
+function normalizeMxToolboxAssignees(assignedUserId: MxToolboxAssignee) {
+  if (Array.isArray(assignedUserId)) {
+    return Array.from(new Set(assignedUserId.map((id) => String(id).trim()).filter(Boolean)));
+  }
+  const normalized = assignedUserId ? String(assignedUserId).trim() : "";
+  return normalized ? [normalized] : [];
+}
+
+async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: MxToolboxAssignee) {
   if (assignedUserId === null) return null;
 
   const allAccounts = await getMxToolboxAccounts();
-  const accounts = assignedUserId
-    ? allAccounts.filter((account) => account.assignedUserId === assignedUserId)
+  const assigneeIds = normalizeMxToolboxAssignees(assignedUserId);
+  const accounts = assigneeIds.length > 0
+    ? allAccounts.filter((account) => account.assignedUserId && assigneeIds.includes(account.assignedUserId))
     : allAccounts;
 
   if (accounts.length === 0) return null;
 
-  const rotationKey = assignedUserId
-    ? `mxtoolbox_account_rotation_index_${assignedUserId}`
+  const rotationKey = assigneeIds.length > 0
+    ? `mxtoolbox_account_rotation_index_${assigneeIds.sort().join("_")}`
     : "mxtoolbox_account_rotation_index";
   const startIndex = await getSetting<number>(rotationKey, 0);
   const errors: string[] = [];
@@ -344,7 +355,7 @@ async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: string
   const fallback = await checkDnsblBlacklist(ip);
   return {
     ...fallback,
-    error: `${assignedUserId ? "Assigned MxToolbox account failed" : "All MxToolbox accounts failed"}, used DNSBL fallback: ${errors.join("; ")}`,
+    error: `${assigneeIds.length > 0 ? "Assigned MxToolbox account failed" : "All MxToolbox accounts failed"}, used DNSBL fallback: ${errors.join("; ")}`,
   };
 }
 
@@ -385,7 +396,7 @@ async function checkDnsblBlacklist(ip: string) {
   };
 }
 
-export async function checkIpBlacklist(ip: string, assignedUserId?: string | null) {
+export async function checkIpBlacklist(ip: string, assignedUserId?: MxToolboxAssignee) {
   const pooledResult = await checkMxtoolboxWithAccountPool(ip, assignedUserId);
   if (pooledResult) return pooledResult;
 
@@ -393,19 +404,19 @@ export async function checkIpBlacklist(ip: string, assignedUserId?: string | nul
   if (assignedUserId === null) {
     return {
       ...fallback,
-      error: "No user-specific MxToolbox account is available for this server, used DNSBL fallback.",
+      error: "This server has no assigned user with an enabled MxToolbox account, used DNSBL fallback.",
     };
   }
-  if (assignedUserId) {
+  if (normalizeMxToolboxAssignees(assignedUserId).length > 0) {
     return {
       ...fallback,
-      error: "No enabled MxToolbox account is assigned to this server user, used DNSBL fallback.",
+      error: "No enabled MxToolbox account is assigned to any user on this server, used DNSBL fallback.",
     };
   }
   return fallback;
 }
 
-export async function enrichIpAddress(ipId: string, force = false, assignedUserId?: string | null): Promise<IpIntelligenceSnapshot | null> {
+export async function enrichIpAddress(ipId: string, force = false, assignedUserId?: MxToolboxAssignee): Promise<IpIntelligenceSnapshot | null> {
   const [row] = await db.select().from(ipAddresses).where(eq(ipAddresses.id, ipId)).limit(1);
   if (!row) return null;
 
@@ -461,11 +472,10 @@ export async function runDailyIpIntelligence(force = false) {
         .where(inArray(serverUsers.serverId, serverIds))
         .orderBy(serverUsers.createdAt)
     : [];
-  const assignedUserByServer = new Map<string, string>();
+  const assignedUsersByServer = new Map<string, string[]>();
   for (const assignment of assignmentRows) {
-    if (!assignedUserByServer.has(assignment.serverId)) {
-      assignedUserByServer.set(assignment.serverId, assignment.userId);
-    }
+    const current = assignedUsersByServer.get(assignment.serverId) || [];
+    assignedUsersByServer.set(assignment.serverId, [...current, assignment.userId]);
   }
 
   const results: IpIntelligenceSnapshot[] = [];
@@ -473,7 +483,7 @@ export async function runDailyIpIntelligence(force = false) {
 
   for (const ip of allIps) {
     try {
-      const snapshot = await enrichIpAddress(ip.id, force, assignedUserByServer.get(ip.serverId) || null);
+      const snapshot = await enrichIpAddress(ip.id, force, assignedUsersByServer.get(ip.serverId) || null);
       if (snapshot) results.push(snapshot);
     } catch (err) {
       errors.push({ ip: ip.address, error: err instanceof Error ? err.message : "Unknown error" });
@@ -538,11 +548,10 @@ export async function runIpIntelligenceForServers(serverIds: string[], force = t
         .from(serverUsers)
         .where(inArray(serverUsers.serverId, uniqueServerIds))
         .orderBy(serverUsers.createdAt);
-  const assignedUserByServer = new Map<string, string>();
+  const assignedUsersByServer = new Map<string, string[]>();
   for (const assignment of assignmentRows) {
-    if (!assignedUserByServer.has(assignment.serverId)) {
-      assignedUserByServer.set(assignment.serverId, assignment.userId);
-    }
+    const current = assignedUsersByServer.get(assignment.serverId) || [];
+    assignedUsersByServer.set(assignment.serverId, [...current, assignment.userId]);
   }
 
   const results: IpIntelligenceSnapshot[] = [];
@@ -550,7 +559,7 @@ export async function runIpIntelligenceForServers(serverIds: string[], force = t
 
   for (const ip of targetIps) {
     try {
-      const accountUserId = userId || assignedUserByServer.get(ip.serverId) || null;
+      const accountUserId = userId || assignedUsersByServer.get(ip.serverId) || null;
       const snapshot = await enrichIpAddress(ip.id, force, accountUserId);
       if (snapshot) results.push(snapshot);
     } catch (err) {

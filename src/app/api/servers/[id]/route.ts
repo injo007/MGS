@@ -47,7 +47,7 @@ function cleanIpAddressList(value: unknown) {
   );
 }
 
-async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null, blacklistUserId?: string | null) {
+async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null, blacklistUserIds?: string | string[] | null) {
   if (!addresses) return;
 
   const existing = await db
@@ -80,7 +80,7 @@ async function syncServerIpAddresses(serverId: string, providerId: string, addre
         status: "active",
       })
       .returning();
-    await enrichIpAddress(createdIp.id, true, blacklistUserId).catch(() => null);
+    await enrichIpAddress(createdIp.id, true, blacklistUserIds).catch(() => null);
   }
 }
 
@@ -197,14 +197,15 @@ export async function PUT(
       ? requestedAssignedUserIds
       : Array.from(new Set([...requestedAssignedUserIds, sessionUserId(session)]))
     : null;
-  let blacklistUserId = finalAssignedUserIds?.[0] || null;
-  if (!blacklistUserId) {
-    const [existingAssignment] = await db
+  let blacklistUserIds: string | string[] | null = finalAssignedUserIds;
+  if (!blacklistUserIds) {
+    const existingAssignments = await db
       .select({ userId: serverUsers.userId })
       .from(serverUsers)
-      .where(eq(serverUsers.serverId, id))
-      .limit(1);
-    blacklistUserId = existingAssignment?.userId || sessionUserId(session);
+      .where(eq(serverUsers.serverId, id));
+    blacklistUserIds = existingAssignments.length > 0
+      ? existingAssignments.map((assignment) => assignment.userId)
+      : sessionUserId(session);
   }
 
   const [updated] = await db
@@ -213,7 +214,7 @@ export async function PUT(
     .where(eq(servers.id, id))
     .returning();
 
-  await syncServerIpAddresses(id, updated.providerId, cleanedIpAddresses, blacklistUserId);
+  await syncServerIpAddresses(id, updated.providerId, cleanedIpAddresses, blacklistUserIds);
 
   // Update assigned users if provided
   if (finalAssignedUserIds) {
