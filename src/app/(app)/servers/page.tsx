@@ -120,53 +120,29 @@ function money(value: number, currency = "USD") {
 }
 
 function serverRowTone(status: string, selected: boolean) {
-  if (selected) return "bg-[#EEF2FF] hover:bg-[#E0E7FF]";
+  if (selected) return "border-l-4 border-l-[#4F46E5] bg-[#F8FAFC] shadow-[inset_8px_0_14px_-16px_rgba(79,70,229,0.6)] hover:bg-[#F8FAFC]";
   switch (status) {
     case "active":
-      return "bg-[#F0FDF4] hover:bg-[#ECFDF5]";
+      return "border-l-4 border-l-[#22C55E] bg-white shadow-[inset_8px_0_14px_-16px_rgba(34,197,94,0.55)] hover:bg-[#F8FAFC]";
     case "pending":
-      return "bg-[#FFFBEB] hover:bg-[#FEF3C7]/60";
+      return "border-l-4 border-l-[#F59E0B] bg-white shadow-[inset_8px_0_14px_-16px_rgba(245,158,11,0.5)] hover:bg-[#F8FAFC]";
     case "paused":
-      return "bg-[#F8FAFC] hover:bg-[#F1F5F9]";
+      return "border-l-4 border-l-[#94A3B8] bg-white shadow-[inset_8px_0_14px_-16px_rgba(100,116,139,0.4)] hover:bg-[#F8FAFC]";
     case "public":
-      return "bg-[#EFF6FF] hover:bg-[#DBEAFE]/55";
+      return "border-l-4 border-l-[#3B82F6] bg-white shadow-[inset_8px_0_14px_-16px_rgba(59,130,246,0.5)] hover:bg-[#F8FAFC]";
     case "port_closed":
-      return "bg-[#FFF7ED] hover:bg-[#FFEDD5]/65";
+      return "border-l-4 border-l-[#F97316] bg-white shadow-[inset_8px_0_14px_-16px_rgba(249,115,22,0.5)] hover:bg-[#F8FAFC]";
     case "ts04_error":
     case "bounce":
     case "complaint":
-      return "bg-[#FFF1F2] hover:bg-[#FFE4E6]/65";
+      return "border-l-4 border-l-[#F43F5E] bg-white shadow-[inset_8px_0_14px_-16px_rgba(244,63,94,0.5)] hover:bg-[#F8FAFC]";
     case "suspended":
     case "cancelled":
     case "expired":
     case "down":
-      return "bg-[#FEF2F2] hover:bg-[#FEE2E2]/65";
+      return "border-l-4 border-l-[#EF4444] bg-white shadow-[inset_8px_0_14px_-16px_rgba(239,68,68,0.5)] hover:bg-[#F8FAFC]";
     default:
-      return "bg-white hover:bg-[#F8FAFC]";
-  }
-}
-
-function serverStatusSelectTone(status: string) {
-  switch (status) {
-    case "active":
-      return "border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D]";
-    case "pending":
-      return "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]";
-    case "public":
-      return "border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB]";
-    case "port_closed":
-      return "border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]";
-    case "ts04_error":
-    case "bounce":
-    case "complaint":
-      return "border-[#FECDD3] bg-[#FFF1F2] text-[#BE123C]";
-    case "suspended":
-    case "cancelled":
-    case "expired":
-    case "down":
-      return "border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]";
-    default:
-      return "border-[#E5E7EB] bg-white text-[#374151]";
+      return "border-l-4 border-l-transparent bg-white hover:bg-[#F8FAFC]";
   }
 }
 
@@ -1036,7 +1012,7 @@ function ServersPageContent() {
                           value={server.status}
                           onChange={(e) => saveStatus(server, e.target.value)}
                           disabled={savingStatuses[server.id]}
-                          className={`h-[30px] rounded-[6px] border px-2 text-[12px] font-semibold outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60 ${serverStatusSelectTone(server.status)}`}
+                          className="h-[30px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#374151] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
                         >
                           {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                         </select>

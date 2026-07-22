@@ -101,18 +101,18 @@ function percent(numerator: number, denominator: number) {
 
 function providerRowTone(provider: Provider) {
   if (provider.totalServers > 0) {
-    return "bg-[#F0FDF4] hover:bg-[#ECFDF5]";
+    return "border-l-4 border-l-[#22C55E] bg-white shadow-[inset_8px_0_14px_-16px_rgba(34,197,94,0.55)] hover:bg-[#F8FAFC]";
   }
   if (provider.contactStatus === "contacted" || provider.responseStatus === "replied") {
-    return "bg-[#EEF2FF]/60 hover:bg-[#E0E7FF]/60";
+    return "border-l-4 border-l-[#6366F1] bg-white shadow-[inset_8px_0_14px_-16px_rgba(99,102,241,0.5)] hover:bg-[#F8FAFC]";
   }
   if (provider.contactStatus === "follow_up_due" || provider.responseStatus === "needs_follow_up") {
-    return "bg-[#FFF7ED] hover:bg-[#FFEDD5]/70";
+    return "border-l-4 border-l-[#F59E0B] bg-white shadow-[inset_8px_0_14px_-16px_rgba(245,158,11,0.5)] hover:bg-[#F8FAFC]";
   }
   if (provider.contactStatus === "not_contacted" || provider.contactStatus === "ready_to_contact") {
-    return "bg-[#F8FAFC] hover:bg-[#F1F5F9]";
+    return "border-l-4 border-l-[#CBD5E1] bg-white shadow-[inset_8px_0_14px_-16px_rgba(100,116,139,0.35)] hover:bg-[#F8FAFC]";
   }
-  return "bg-white hover:bg-[#F8FAFC]";
+  return "border-l-4 border-l-transparent bg-white hover:bg-[#F8FAFC]";
 }
 
 function providerNote(provider: Provider) {
