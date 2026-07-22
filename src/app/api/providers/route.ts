@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, users, auditLogs, servers, sendingLogs, serverUsers } from "@/db/schema";
+import { providers, users, auditLogs, servers, sendingLogs, serverUsers, notes } from "@/db/schema";
 import { eq, ilike, desc, asc, and, count, sql, inArray } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 import { sendAuditTelegramAlert } from "@/lib/telegram";
@@ -118,6 +118,20 @@ const providerScoreExpr = sql<number>`least(
   )
 )`;
 
+const latestProviderNoteExpr = sql<string | null>`(
+  select ${notes.content}
+  from ${notes}
+  where ${notes.entityType} = 'provider'
+    and ${notes.entityId} = ${providers.id}
+  order by ${notes.createdAt} desc
+  limit 1
+)`;
+
+function cleanFormNote(value: unknown) {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -182,6 +196,7 @@ export async function GET(request: Request) {
         dailyLimit: providers.dailyLimit,
         hourlyLimit: providers.hourlyLimit,
         abusePolicyNotes: providers.abusePolicyNotes,
+        notes: latestProviderNoteExpr,
         startingPrice: providers.startingPrice,
         currency: providers.currency,
         billingMethod: providers.billingMethod,
@@ -323,6 +338,17 @@ export async function POST(request: Request) {
       createdById: session.user.id,
     })
     .returning();
+
+  const formNote = cleanFormNote(body.notes);
+  if (formNote) {
+    await db.insert(notes).values({
+      entityType: "provider",
+      entityId: created.id,
+      content: formNote,
+      isInternal: true,
+      authorId: session.user.id,
+    });
+  }
 
   await db.insert(auditLogs).values({
     userId: session.user.id,

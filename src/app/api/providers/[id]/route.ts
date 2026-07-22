@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, users, auditLogs, sendingLogs } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { providers, users, auditLogs, sendingLogs, notes } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 import { sendAuditTelegramAlert } from "@/lib/telegram";
 
@@ -70,6 +70,52 @@ function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof pro
   return cleaned as Partial<typeof providers.$inferInsert>;
 }
 
+const latestProviderNoteExpr = (providerId: string) => db
+  .select({
+    id: notes.id,
+    content: notes.content,
+  })
+  .from(notes)
+  .where(and(eq(notes.entityType, "provider"), eq(notes.entityId, providerId)))
+  .orderBy(desc(notes.createdAt))
+  .limit(1);
+
+function cleanFormNote(value: unknown) {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+async function saveProviderFormNote(providerId: string, authorId: string, value: unknown) {
+  const content = cleanFormNote(value);
+  const [latestNote] = await latestProviderNoteExpr(providerId);
+
+  if (!content) {
+    if (latestNote) await db.delete(notes).where(eq(notes.id, latestNote.id));
+    return null;
+  }
+
+  if (latestNote) {
+    const [updated] = await db
+      .update(notes)
+      .set({ content, updatedAt: new Date(), authorId })
+      .where(eq(notes.id, latestNote.id))
+      .returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(notes)
+    .values({
+      entityType: "provider",
+      entityId: providerId,
+      content,
+      isInternal: true,
+      authorId,
+    })
+    .returning();
+  return created;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -131,7 +177,9 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(provider);
+  const [latestNote] = await latestProviderNoteExpr(id);
+
+  return NextResponse.json({ ...provider, notes: latestNote?.content || "" });
 }
 
 export async function PUT(
@@ -171,6 +219,10 @@ export async function PUT(
     .set({ ...cleanProviderPayload(body), country: nextCountry, updatedAt: new Date() })
     .where(eq(providers.id, id))
     .returning();
+
+  if (Object.prototype.hasOwnProperty.call(body, "notes")) {
+    await saveProviderFormNote(id, session.user.id, body.notes);
+  }
 
   await db.insert(auditLogs).values({
     userId: session.user.id,

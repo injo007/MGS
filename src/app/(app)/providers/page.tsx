@@ -48,6 +48,7 @@ interface Provider {
   mailServerAllowed: boolean | null;
   sendingRestrictions: string | null;
   abusePolicyNotes: string | null;
+  notes: string | null;
   dailyLimit: number | null;
   hourlyLimit: number | null;
   startingPrice: string | null;
@@ -116,7 +117,7 @@ function providerRowTone(provider: Provider) {
 }
 
 function providerNote(provider: Provider) {
-  return provider.abusePolicyNotes || provider.sendingRestrictions || "—";
+  return provider.notes || provider.abusePolicyNotes || provider.sendingRestrictions || "—";
 }
 
 export default function ProvidersPage() {

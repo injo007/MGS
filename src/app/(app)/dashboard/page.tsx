@@ -120,6 +120,7 @@ interface ProviderRow {
   mailServerAllowed: boolean | null;
   sendingRestrictions: string | null;
   abusePolicyNotes: string | null;
+  notes: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
   lastContactDate: string | null;
@@ -272,7 +273,7 @@ function displayProviderStatus(provider: ProviderRow) {
 }
 
 function providerNote(provider: ProviderRow) {
-  return provider.abusePolicyNotes || provider.sendingRestrictions || "-";
+  return provider.notes || provider.abusePolicyNotes || provider.sendingRestrictions || "-";
 }
 
 function compactNumber(value: number) {
