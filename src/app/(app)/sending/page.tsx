@@ -217,6 +217,12 @@ export default function SendingPage() {
   const [savingLimits, setSavingLimits] = useState<Record<string, boolean>>({});
   const [savingSentToday, setSavingSentToday] = useState<Record<string, boolean>>({});
   const [savingWeeklyStats, setSavingWeeklyStats] = useState<Record<string, boolean>>({});
+  const [savingRangeStats, setSavingRangeStats] = useState(false);
+  const [rangeForm, setRangeForm] = useState({
+    startDate: "",
+    endDate: "",
+    dailyVolume: "",
+  });
   const [warmupEnabled, setWarmupEnabled] = useState(false);
   const [autoThrottle, setAutoThrottle] = useState<Record<string, boolean>>({});
   const [drawerForm, setDrawerForm] = useState({
@@ -485,10 +491,6 @@ export default function SendingPage() {
     }
   };
 
-  const logForServerDate = (serverId: string, dayKey: string) => {
-    return logs.find((log) => log.serverId === serverId && dateKey(new Date(log.date)) === dayKey);
-  };
-
   const saveDailyVolume = async (server: ServerRow, dayKey: string, value: string, currentValue: number, options?: { today?: boolean }) => {
     const normalized = value.trim();
     const current = String(currentValue ?? 0);
@@ -500,58 +502,20 @@ export default function SendingPage() {
       return;
     }
 
-    const existingLog = logForServerDate(server.id, dayKey);
-    const assignedUserId = server.assignedUsers?.[0]?.id;
-    const ipAddressId = server.ips?.[0]?.id;
-
-    if (!existingLog && !assignedUserId) {
-      toast.error("Assign a user to this server before setting daily volume");
-      return;
-    }
-
-    if (!existingLog && !ipAddressId) {
-      toast.error("Add an IP address to this server before setting daily volume");
-      return;
-    }
-
     const savingKey = `${server.id}:${dayKey}`;
     if (options?.today) setSavingSentToday((state) => ({ ...state, [server.id]: true }));
     else setSavingWeeklyStats((state) => ({ ...state, [savingKey]: true }));
 
     try {
-      const bounces = Number(existingLog?.bounces || 0);
-      const successful = Math.max(0, nextValue - bounces);
-      const date = new Date(`${dayKey}T12:00:00.000Z`);
-      const res = existingLog
-        ? await fetch(`/api/sending/${existingLog.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              actualSends: nextValue,
-              successfulSends: Math.min(nextValue, successful),
-              plannedSends: server.dailySendLimit ?? nextValue,
-            }),
-          })
-        : await fetch("/api/sending", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              date: date.toISOString(),
-              mailerId: assignedUserId,
-              providerId: server.providerId,
-              serverId: server.id,
-              ipAddressId,
-              plannedSends: server.dailySendLimit ?? nextValue,
-              actualSends: nextValue,
-              successfulSends: nextValue,
-              bounces: 0,
-              complaints: 0,
-              unsubscribes: 0,
-              operationalStatus: "normal",
-              deliveryNotes: "Updated from Server Statistics Center",
-            }),
-          });
-
+      const res = await fetch("/api/sending/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverId: server.id,
+          date: dayKey,
+          actualSends: nextValue,
+        }),
+      });
       if (!res.ok) throw new Error(await res.text());
       toast.success(options?.today ? "Today volume saved" : "Daily volume saved");
       setWeeklyDrafts((state) => {
@@ -567,6 +531,50 @@ export default function SendingPage() {
     } finally {
       if (options?.today) setSavingSentToday((state) => ({ ...state, [server.id]: false }));
       else setSavingWeeklyStats((state) => ({ ...state, [savingKey]: false }));
+    }
+  };
+
+  const applyRangeStatistics = async () => {
+    const serverIds = selectedServers.map((server) => server.id);
+    const actualSends = Number(rangeForm.dailyVolume);
+    if (serverIds.length === 0) {
+      toast.error("Select at least one server first");
+      return;
+    }
+    if (!rangeForm.startDate || !rangeForm.endDate || !Number.isFinite(actualSends) || actualSends < 0) {
+      toast.error("Start date, end date, and daily volume are required");
+      return;
+    }
+    if (new Date(rangeForm.startDate) > new Date(rangeForm.endDate)) {
+      toast.error("Start date must be before end date");
+      return;
+    }
+    const days = Math.floor((new Date(rangeForm.endDate).getTime() - new Date(rangeForm.startDate).getTime()) / 86400000) + 1;
+    if (!window.confirm(`Set ${formatNumber(actualSends)} sent per day for ${serverIds.length} selected server${serverIds.length === 1 ? "" : "s"} across ${days} day${days === 1 ? "" : "s"}? Existing records for those days will be overwritten and duplicate same-day records will be collapsed.`)) return;
+
+    setSavingRangeStats(true);
+    try {
+      const res = await fetch("/api/sending/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverIds,
+          startDate: rangeForm.startDate,
+          endDate: rangeForm.endDate,
+          actualSends,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) throw new Error(result.error || "Failed to apply range statistics");
+      const failures = Number(result.failed || 0);
+      toast.success(`Range statistics saved for ${result.updated || 0} day record${result.updated === 1 ? "" : "s"}`, {
+        description: failures ? `${failures} records could not be saved. Check selected servers have IPs.` : result.removedDuplicates ? `${result.removedDuplicates} duplicate record${result.removedDuplicates === 1 ? "" : "s"} collapsed.` : undefined,
+      });
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to apply range statistics");
+    } finally {
+      setSavingRangeStats(false);
     }
   };
 
@@ -762,6 +770,32 @@ export default function SendingPage() {
               <button disabled={selected.length === 0} onClick={() => updateStatus(selected, "paused")} className="h-[30px] rounded-[7px] border border-[#FECACA] bg-white px-3 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">Mark Paused</button>
               {selected.length > 0 && <button onClick={() => setSelected([])} className="ml-auto text-[12px] font-medium text-[#4F46E5]">Clear selection</button>}
             </div>
+
+            {selectedServers.length > 0 && (
+              <div className="grid gap-3 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3 lg:grid-cols-[1fr_auto] lg:items-end">
+                <div>
+                  <p className="text-[13px] font-bold text-[#111827]">Set Historical Statistics Range</p>
+                  <p className="mt-0.5 text-[12px] text-[#6B7280]">Apply one daily sent volume across a custom date range for the selected server{selectedServers.length === 1 ? "" : "s"}.</p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                    Start
+                    <input type="date" value={rangeForm.startDate} onChange={(event) => setRangeForm((current) => ({ ...current, startDate: event.target.value }))} className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]" />
+                  </label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                    End
+                    <input type="date" value={rangeForm.endDate} onChange={(event) => setRangeForm((current) => ({ ...current, endDate: event.target.value }))} className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]" />
+                  </label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                    Sent / day
+                    <input type="number" min="0" value={rangeForm.dailyVolume} onChange={(event) => setRangeForm((current) => ({ ...current, dailyVolume: event.target.value }))} className="mt-1 block h-[32px] w-[110px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]" />
+                  </label>
+                  <button onClick={applyRangeStatistics} disabled={savingRangeStats} className="h-[32px] rounded-[7px] bg-[#4F46E5] px-3 text-[12px] font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60">
+                    {savingRangeStats ? "Saving..." : "Apply Range"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {alertFilter && (
               <div className="flex items-center justify-between border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2">

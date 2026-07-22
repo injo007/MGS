@@ -324,6 +324,7 @@ function ServersPageContent() {
         sortOrder: "desc",
       });
       if (providerFilter !== "all") params.set("providerId", providerFilter);
+      if (admin && assignedFilter !== "all") params.set("assignedUserId", assignedFilter);
 
       const res = await fetch(`/api/servers?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load servers");
@@ -349,7 +350,7 @@ function ServersPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [admin, providerFilter, session]);
+  }, [admin, assignedFilter, providerFilter, session]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -766,10 +767,12 @@ function ServersPageContent() {
             <option value="all">All Billing Cycles</option>
             {billingCycles.map((cycle) => <option key={cycle} value={cycle}>{cycle}</option>)}
           </select>
-          <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
-            <option value="all">All Assigned</option>
-            {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-          </select>
+          {admin && (
+            <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+              <option value="all">All Users</option>
+              {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+          )}
           <div className="relative min-w-[220px] flex-1">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
             <input

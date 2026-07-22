@@ -16,8 +16,10 @@ import {
   EyeOff,
   Loader2,
   ExternalLink,
+  Download,
   Trash2,
   Plus,
+  Upload,
 } from "lucide-react";
 
 interface MxToolboxAccount {
@@ -87,6 +89,7 @@ const TABS = [
   { id: "telegram", label: "Telegram Bot", icon: MessageSquare },
   { id: "smtp", label: "SMTP", icon: Mail },
   { id: "ip", label: "IP Intelligence", icon: Shield },
+  { id: "backup", label: "Backup", icon: Download },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -104,6 +107,7 @@ export default function SettingsPage() {
   const [savingTelegram, setSavingTelegram] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [savingIp, setSavingIp] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
 
   const [testingAI, setTestingAI] = useState(false);
   const [settingWebhook, setSettingWebhook] = useState(false);
@@ -407,6 +411,32 @@ export default function SettingsPage() {
       });
     } finally {
       setSendingTestMsg(false);
+    }
+  }
+
+  async function restoreBackup(file: File | null) {
+    if (!file) return;
+    if (!window.confirm("Restore this backup file? Existing records with the same IDs will be updated, and unrelated current records will remain.")) return;
+
+    setRestoringBackup(true);
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backup),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || "Failed to restore backup");
+      toast.success("Backup restored", {
+        description: `${Object.values(result.restored || {}).reduce((sum: number, value: any) => sum + Number(value || 0), 0)} records processed.`,
+      });
+      fetchSettings();
+    } catch (err: any) {
+      toast.error("Backup restore failed", { description: err.message || "Invalid backup file" });
+    } finally {
+      setRestoringBackup(false);
     }
   }
 
@@ -1061,6 +1091,47 @@ export default function SettingsPage() {
                   {savingIp ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin inline" /> : <Save className="h-3.5 w-3.5 mr-2 inline" />}
                   {savingIp ? "Saving..." : "Save MxToolbox Accounts"}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "backup" && (
+            <div className="bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#E5E7EB]">
+                <h3 className="text-[13px] font-semibold text-[#111827] flex items-center gap-2">
+                  <Download className="h-4 w-4" /> Manual Backup
+                </h3>
+                <p className="text-[13px] text-[#6B7280] mt-0.5">Download or restore a JSON backup of CRM data, settings, users, providers, servers, IPs, statistics, tasks, and notes.</p>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+                  <p className="text-[13px] font-semibold text-[#111827]">Download Backup</p>
+                  <p className="mt-1 text-[13px] text-[#6B7280]">Use this before imports, server moves, or major edits. The file includes sensitive settings and encrypted provider credentials, so store it carefully.</p>
+                  <a href="/api/backup" className="mt-3 inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#4F46E5] px-3.5 text-[13px] font-semibold text-white hover:bg-[#4338CA]">
+                    <Download className="h-3.5 w-3.5" />
+                    Download JSON Backup
+                  </a>
+                </div>
+
+                <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-4">
+                  <p className="text-[13px] font-semibold text-[#111827]">Restore Backup</p>
+                  <p className="mt-1 text-[13px] text-[#6B7280]">Upload a CloudOps JSON backup. Restore updates matching IDs and keys; it does not delete unrelated current records.</p>
+                  <label className="mt-3 inline-flex h-[34px] cursor-pointer items-center gap-1.5 rounded-[7px] border border-[#E5E7EB] bg-white px-3.5 text-[13px] font-semibold text-[#374151] hover:bg-[#F9FAFB]">
+                    {restoringBackup ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    {restoringBackup ? "Restoring..." : "Upload Backup"}
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      className="hidden"
+                      disabled={restoringBackup}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] || null;
+                        restoreBackup(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           )}
