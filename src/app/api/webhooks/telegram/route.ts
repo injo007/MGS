@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, tasks, auditLogs, users } from "@/db/schema";
-import { count, desc, eq, and, sql } from "drizzle-orm";
-import { sendTelegramMessage, parseTelegramUpdate } from "@/lib/telegram";
+import { providers, tasks, auditLogs } from "@/db/schema";
+import { count, desc, eq } from "drizzle-orm";
+import { sendTelegramMessage, parseTelegramUpdate, setTelegramWebhook } from "@/lib/telegram";
+import { isAdmin } from "@/lib/access-control";
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +16,22 @@ export async function POST(request: Request) {
     }
 
     const rawUpdate = await request.json();
+
+    if (rawUpdate?.action === "send_test" || rawUpdate?.url) {
+      const session = await auth();
+      if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      if (!isAdmin(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+      if (rawUpdate.action === "send_test") {
+        if (!rawUpdate.chat_id) return NextResponse.json({ error: "chat_id is required" }, { status: 400 });
+        await sendTelegramMessage(String(rawUpdate.chat_id), rawUpdate.text || "Test message from CloudOps CRM");
+        return NextResponse.json({ ok: true });
+      }
+
+      await setTelegramWebhook(String(rawUpdate.url), expectedSecret);
+      return NextResponse.json({ ok: true });
+    }
+
     const parsed = parseTelegramUpdate(rawUpdate);
 
     if (!parsed || !parsed.text) {
@@ -26,7 +44,7 @@ export async function POST(request: Request) {
 
     const chatId = parsed.chatId;
     const cmd = parsed.command;
-    const args = parsed.commandArgs;
+    void parsed.commandArgs;
 
     let responseText: string;
 

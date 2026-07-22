@@ -52,6 +52,7 @@ interface SettingsData {
   openrouter_model?: string;
   telegram_bot_token?: string;
   telegram_webhook_url?: string;
+  telegram_alert_chat_id?: string;
   smtp_host?: string;
   smtp_port?: string;
   smtp_secure?: boolean;
@@ -158,6 +159,7 @@ export default function SettingsPage() {
         openrouter_model: json.openrouter_model || "openai/gpt-4o-mini",
         telegram_bot_token: json.telegram_bot_token || "",
         telegram_webhook_url: json.telegram_webhook_url || "",
+        telegram_alert_chat_id: json.telegram_alert_chat_id || "",
         smtp_host: json.smtp_host || "",
         smtp_port: json.smtp_port || "587",
         smtp_secure: json.smtp_secure ?? false,
@@ -266,6 +268,7 @@ export default function SettingsPage() {
           payload.telegram_bot_token = inputTelegramToken;
         }
         payload.telegram_webhook_url = settings.telegram_webhook_url;
+        payload.telegram_alert_chat_id = settings.telegram_alert_chat_id;
         break;
       case "smtp":
         setSaving = setSavingSmtp;
@@ -397,7 +400,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "send_test",
-          chat_id: testChatId || undefined,
+          chat_id: testChatId || settings.telegram_alert_chat_id || undefined,
           text: "Test message from CloudOps CRM",
         }),
       });
@@ -824,6 +827,19 @@ export default function SettingsPage() {
                     value={testChatId}
                     onChange={(e) => setTestChatId(e.target.value)}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[13px] font-medium text-[#374151]">Alert Chat ID</label>
+                  <input
+                    className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                    placeholder="Chat/group/channel that receives login and create/delete alerts"
+                    value={settings.telegram_alert_chat_id || ""}
+                    onChange={(e) => update("telegram_alert_chat_id", e.target.value)}
+                  />
+                  <p className="text-[13px] text-[#6B7280]">
+                    Used for user logins and user/provider/server/IP create-delete alerts. The test message uses this chat when Test Chat ID is empty.
+                  </p>
                 </div>
 
                 <div className="flex gap-2">

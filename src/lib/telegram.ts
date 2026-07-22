@@ -1,4 +1,10 @@
-const TELEGRAM_API_BASE = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN || ""}`;
+import { db } from "@/db";
+import { settings } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+function telegramApiBase(token: string) {
+  return `https://api.telegram.org/bot${token}`;
+}
 
 export interface TelegramUser {
   id: number;
@@ -57,8 +63,23 @@ export interface ParsedTelegramUpdate {
   timestamp: number;
 }
 
-async function telegramFetch(path: string, options?: RequestInit): Promise<Response> {
-  const url = `${TELEGRAM_API_BASE}${path}`;
+async function getSettingValue(key: string): Promise<string> {
+  const [row] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, key)).limit(1);
+  return typeof row?.value === "string" ? row.value : "";
+}
+
+export async function getTelegramBotToken(): Promise<string> {
+  return process.env.TELEGRAM_BOT_TOKEN || await getSettingValue("telegram_bot_token");
+}
+
+export async function getTelegramAlertChatId(): Promise<string> {
+  return process.env.TELEGRAM_ALERT_CHAT_ID || await getSettingValue("telegram_alert_chat_id");
+}
+
+async function telegramFetch(path: string, options?: RequestInit, tokenOverride?: string): Promise<Response> {
+  const token = tokenOverride || await getTelegramBotToken();
+  if (!token) throw new Error("Telegram bot token is not configured");
+  const url = `${telegramApiBase(token)}${path}`;
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -86,6 +107,52 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
   return { messageId: data.result?.message_id };
 }
 
+export async function sendTelegramAlert(text: string): Promise<boolean> {
+  const chatId = await getTelegramAlertChatId();
+  if (!chatId) return false;
+  await sendTelegramMessage(chatId, text);
+  return true;
+}
+
+function escapeMarkdown(value: unknown): string {
+  return String(value ?? "-").replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
+export async function sendAuditTelegramAlert(input: {
+  action: "login" | "create" | "delete";
+  entityType: "user" | "provider" | "server" | "ip_address";
+  actorName?: string | null;
+  actorEmail?: string | null;
+  entityName?: string | null;
+  entityDetail?: string | null;
+}) {
+  try {
+    const actionLabels = {
+      login: "User Login",
+      create: "Created",
+      delete: "Deleted",
+    };
+    const entityLabels = {
+      user: "User",
+      provider: "Provider",
+      server: "Server",
+      ip_address: "IP Address",
+    };
+    const icon = input.action === "delete" ? "🗑️" : input.action === "login" ? "🔐" : "➕";
+    const lines = [
+      `${icon} *${escapeMarkdown(actionLabels[input.action])}*`,
+      `Type: ${escapeMarkdown(entityLabels[input.entityType])}`,
+      input.entityName ? `Item: ${escapeMarkdown(input.entityName)}` : null,
+      input.entityDetail ? `Details: ${escapeMarkdown(input.entityDetail)}` : null,
+      input.actorName || input.actorEmail ? `By: ${escapeMarkdown(input.actorName || input.actorEmail)}${input.actorEmail ? ` \\(${escapeMarkdown(input.actorEmail)}\\)` : ""}` : null,
+      `Time: ${escapeMarkdown(new Date().toLocaleString("en-US", { timeZone: "UTC" }))} UTC`,
+    ].filter(Boolean);
+    await sendTelegramAlert(lines.join("\n"));
+  } catch (error) {
+    console.warn("[telegram] audit alert failed", error);
+  }
+}
+
 export async function setTelegramWebhook(webhookUrl: string, secretToken?: string): Promise<void> {
   const body: Record<string, unknown> = { url: webhookUrl };
   if (secretToken) body.secret_token = secretToken;
@@ -97,7 +164,7 @@ export async function setTelegramWebhook(webhookUrl: string, secretToken?: strin
   if (!data.ok) throw new Error(`Failed to set webhook: ${data.description}`);
 }
 
-export function parseTelegramUpdate(update: any): ParsedTelegramUpdate | null {
+export function parseTelegramUpdate(update: TelegramUpdate): ParsedTelegramUpdate | null {
   if (!update || !update.update_id) return null;
 
   const message = update.message || update.edited_message || update.channel_post || update.edited_channel_post;

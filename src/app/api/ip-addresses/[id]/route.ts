@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { ipAddresses, auditLogs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { canAccessServer, forbidden } from "@/lib/access-control";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 export async function GET(
   request: Request,
@@ -109,6 +110,15 @@ export async function DELETE(
     entityType: "ip_address",
     entityId: id,
     previousValue: existing,
+  });
+
+  await sendAuditTelegramAlert({
+    action: "delete",
+    entityType: "ip_address",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: existing.address,
+    entityDetail: existing.status || null,
   });
 
   return new NextResponse(null, { status: 204 });

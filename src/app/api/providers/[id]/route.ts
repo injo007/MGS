@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { providers, users, auditLogs, sendingLogs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof providers.$inferInsert> {
   const allowedFields = [
@@ -213,6 +214,15 @@ export async function DELETE(
     entityType: "provider",
     entityId: id,
     previousValue: existing,
+  });
+
+  await sendAuditTelegramAlert({
+    action: "delete",
+    entityType: "provider",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: existing.name,
+    entityDetail: existing.website || existing.country || null,
   });
 
   return new NextResponse(null, { status: 204 });

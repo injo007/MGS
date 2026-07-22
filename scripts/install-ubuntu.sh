@@ -202,6 +202,7 @@ write_env() {
   ensure_env "OPENROUTER_MODEL" "${OPENROUTER_MODEL:-openai/gpt-4o-mini}" "$env_file"
   ensure_env "MXTOOLBOX_API_KEY" "${MXTOOLBOX_API_KEY:-}" "$env_file"
   ensure_env "TELEGRAM_BOT_TOKEN" "${TELEGRAM_BOT_TOKEN:-}" "$env_file"
+  ensure_env "TELEGRAM_ALERT_CHAT_ID" "${TELEGRAM_ALERT_CHAT_ID:-}" "$env_file"
   ensure_env "GMAIL_IMAP_HOST" "${GMAIL_IMAP_HOST:-imap.gmail.com}" "$env_file"
   ensure_env "GMAIL_IMAP_PORT" "${GMAIL_IMAP_PORT:-993}" "$env_file"
   ensure_env "GMAIL_ADDRESS" "${GMAIL_ADDRESS:-}" "$env_file"

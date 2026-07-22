@@ -5,6 +5,7 @@ import { ipAddresses, providers, servers as serversTable, auditLogs, serverUsers
 import { eq, ilike, desc, asc, and, count, sql } from "drizzle-orm";
 import { enrichIpAddress, getIpIntelligenceCache } from "@/lib/ip-intelligence";
 import { canAccessServer, forbidden, isAdmin, sessionUserId } from "@/lib/access-control";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -126,6 +127,15 @@ export async function POST(request: Request) {
     entityType: "ip_address",
     entityId: created.id,
     newValue: created,
+  });
+
+  await sendAuditTelegramAlert({
+    action: "create",
+    entityType: "ip_address",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: created.address,
+    entityDetail: created.status || null,
   });
 
   return NextResponse.json({ ...created, intelligence }, { status: 201 });

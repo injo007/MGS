@@ -5,6 +5,7 @@ import { servers, providers, auditLogs, ipAddresses, sendingLogs, serverUsers, u
 import { eq, ilike, desc, asc, and, count, sql, max, isNull } from "drizzle-orm";
 import { enrichIpAddress, getIpIntelligenceCache } from "@/lib/ip-intelligence";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 function cleanServerPayload(body: Record<string, unknown>): Partial<typeof servers.$inferInsert> {
   const nullableTextFields = [
@@ -338,6 +339,15 @@ export async function POST(request: Request) {
     entityType: "server",
     entityId: created.id,
     newValue: created,
+  });
+
+  await sendAuditTelegramAlert({
+    action: "create",
+    entityType: "server",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: created.name,
+    entityDetail: [created.location, (cleanedIpAddresses?.length || 0) > 0 ? `${cleanedIpAddresses?.length} IP(s)` : null].filter(Boolean).join(" · ") || null,
   });
 
   return NextResponse.json(created, { status: 201 });

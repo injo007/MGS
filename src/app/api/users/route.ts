@@ -7,6 +7,7 @@ import { users, roles, auditLogs } from "@/db/schema";
 import { eq, desc, asc, and, count, sql, ilike } from "drizzle-orm";
 import { hash } from "bcryptjs";
 import { forbidden, isAdmin } from "@/lib/access-control";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -129,6 +130,15 @@ export async function POST(request: Request) {
     entityType: "user",
     entityId: created.id,
     newValue: { ...created, hashedPassword: undefined },
+  });
+
+  await sendAuditTelegramAlert({
+    action: "create",
+    entityType: "user",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: created.name,
+    entityDetail: created.email,
   });
 
   return NextResponse.json(

@@ -5,6 +5,7 @@ import { servers, auditLogs, serverUsers, users, sendingLogs, ipAddresses } from
 import { eq, sql } from "drizzle-orm";
 import { enrichIpAddress, getIpIntelligenceCache } from "@/lib/ip-intelligence";
 import { canAccessServer, forbidden, isAdmin, sessionUserId } from "@/lib/access-control";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 function cleanServerPayload(body: Record<string, unknown>): Partial<typeof servers.$inferInsert> {
   const nullableTextFields = [
@@ -257,6 +258,15 @@ export async function DELETE(
     entityType: "server",
     entityId: id,
     previousValue: existing,
+  });
+
+  await sendAuditTelegramAlert({
+    action: "delete",
+    entityType: "server",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: existing.name,
+    entityDetail: existing.location || existing.status || null,
   });
 
   return new NextResponse(null, { status: 204 });

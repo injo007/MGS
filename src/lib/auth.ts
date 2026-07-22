@@ -1,9 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { db } from "@/db";
 import { users, roles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -46,6 +49,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .update(users)
           .set({ lastLoginAt: new Date() })
           .where(eq(users.id, user[0].id));
+
+        await sendAuditTelegramAlert({
+          action: "login",
+          entityType: "user",
+          actorName: user[0].name,
+          actorEmail: user[0].email,
+          entityName: user[0].name,
+          entityDetail: user[0].roleName,
+        });
 
         return {
           id: user[0].id,

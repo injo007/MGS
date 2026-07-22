@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { providers, users, auditLogs, servers, sendingLogs, serverUsers } from "@/db/schema";
 import { eq, ilike, desc, asc, and, count, sql, inArray } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
+import { sendAuditTelegramAlert } from "@/lib/telegram";
 
 function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof providers.$inferInsert> {
   const allowedFields = [
@@ -329,6 +330,15 @@ export async function POST(request: Request) {
     entityType: "provider",
     entityId: created.id,
     newValue: created,
+  });
+
+  await sendAuditTelegramAlert({
+    action: "create",
+    entityType: "provider",
+    actorName: session.user.name,
+    actorEmail: session.user.email,
+    entityName: created.name,
+    entityDetail: created.website || created.country || null,
   });
 
   return NextResponse.json(created, { status: 201 });
