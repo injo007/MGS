@@ -109,6 +109,29 @@ function reverseIpv4(ip: string) {
   return parts.reverse().join(".");
 }
 
+function isSpamhausListingResponse(response: string) {
+  const parts = response.split(".").map(Number);
+  return parts.length === 4 && parts[0] === 127 && parts[1] === 0 && parts[2] === 0 && parts[3] >= 2 && parts[3] <= 11;
+}
+
+function dnsblFindingFromResponse(zone: string, response: string[]): BlacklistFinding {
+  if (zone === "zen.spamhaus.org") {
+    const listingResponses = response.filter(isSpamhausListingResponse);
+    if (listingResponses.length > 0) {
+      return { source: zone, listed: true, response };
+    }
+
+    return {
+      source: zone,
+      listed: false,
+      response,
+      error: "Spamhaus returned a query policy response, not a blacklist listing. Check MxToolbox/API quota or DNSBL access.",
+    };
+  }
+
+  return { source: zone, listed: response.length > 0, response };
+}
+
 function locationFromGeo(geo: IpGeo | null) {
   if (!geo?.success) return null;
   return [geo.city, geo.region, geo.country].filter(Boolean).join(", ") || geo.country || null;
@@ -181,18 +204,27 @@ async function checkMxtoolboxBlacklist(ip: string, apiKey: string) {
   const failed = Array.isArray(data.Failed) ? data.Failed : [];
   const warnings = Array.isArray(data.Warnings) ? data.Warnings : [];
   const passed = Array.isArray(data.Passed) ? data.Passed : [];
-  const findings = [...failed, ...warnings].map((item: Record<string, unknown>) => ({
+  const listedFindings = failed.map((item: Record<string, unknown>) => ({
     source: "mxtoolbox",
     listed: true,
     name: String(item.Name || item.ID || "Blacklist"),
     info: item.Info ? String(item.Info) : undefined,
     url: item.Url ? String(item.Url) : undefined,
   }));
+  const warningFindings = warnings.map((item: Record<string, unknown>) => ({
+    source: "mxtoolbox",
+    listed: false,
+    name: String(item.Name || item.ID || "Blacklist"),
+    info: item.Info ? String(item.Info) : undefined,
+    url: item.Url ? String(item.Url) : undefined,
+    error: String(item.Message || item.Error || item.Info || "MxToolbox returned a warning for this blacklist lookup."),
+  }));
+  const findings = [...listedFindings, ...warningFindings];
 
   return {
     provider: "mxtoolbox" as const,
-    listed: findings.length > 0,
-    listedCount: findings.length,
+    listed: listedFindings.length > 0,
+    listedCount: listedFindings.length,
     checkedCount: findings.length + passed.length,
     findings,
   };
@@ -279,7 +311,7 @@ async function checkDnsblBlacklist(ip: string) {
   for (const zone of DNSBL_ZONES) {
     try {
       const response = await dns.resolve4(`${reversed}.${zone}`);
-      findings.push({ source: zone, listed: response.length > 0, response });
+      findings.push(dnsblFindingFromResponse(zone, response));
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       findings.push({
@@ -368,11 +400,25 @@ export async function runDailyIpIntelligence(force = false) {
     }
   }
 
+  const blacklistWarnings = results.flatMap((result) => {
+    const warnings: Array<{ ip: string; source: string; message: string }> = [];
+    if (result.blacklist.error) {
+      warnings.push({ ip: result.ip, source: result.blacklist.provider, message: result.blacklist.error });
+    }
+    for (const finding of result.blacklist.findings) {
+      if (finding.error) {
+        warnings.push({ ip: result.ip, source: finding.source, message: finding.error });
+      }
+    }
+    return warnings;
+  });
+
   await setSetting("last_ip_intelligence_daily_run", {
     timestamp: new Date().toISOString(),
     checked: allIps.length,
     listed: results.filter((result) => result.blacklist.listed).length,
     errors,
+    blacklistWarnings,
   });
 
   return {
@@ -380,6 +426,7 @@ export async function runDailyIpIntelligence(force = false) {
     listed: results.filter((result) => result.blacklist.listed).length,
     results,
     errors,
+    blacklistWarnings,
   };
 }
 

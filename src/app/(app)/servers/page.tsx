@@ -636,6 +636,17 @@ function ServersPageContent() {
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
       toast.success(`Blacklist check complete: ${result.checked ?? 0} IPs checked, ${result.listed ?? 0} listed`);
+      const warnings = Array.isArray(result.blacklistWarnings) ? result.blacklistWarnings : [];
+      if (warnings.length > 0) {
+        const mxtoolboxWarnings = warnings.filter((warning: { message?: string }) =>
+          String(warning.message || "").toLowerCase().includes("mxtoolbox"),
+        );
+        const sample = mxtoolboxWarnings[0] || warnings[0];
+        toast.warning(mxtoolboxWarnings.length > 0 ? "MxToolbox API issue" : "Blacklist check warning", {
+          description: `${warnings.length} warning${warnings.length === 1 ? "" : "s"}. ${sample.message || "Review blacklist check settings."}`,
+          duration: 12000,
+        });
+      }
       fetchServers();
     } catch {
       toast.error("Failed to run blacklist check");
