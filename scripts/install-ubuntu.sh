@@ -13,6 +13,7 @@ REPO_URL="${REPO_URL:-}"
 SKIP_CERTBOT="${SKIP_CERTBOT:-0}"
 CERTBOT_STAGING="${CERTBOT_STAGING:-0}"
 NO_CACHE_BUILD="${NO_CACHE_BUILD:-0}"
+ACCESS_ALLOWED_IPS="${ACCESS_ALLOWED_IPS:-${WHITELISTED_IPS:-}}"
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   exec sudo -E bash "$0" "$@"
@@ -189,11 +190,12 @@ write_env() {
   ensure_env "TELEGRAM_WEBHOOK_SECRET" "$(random_hex 32)" "$env_file"
   ensure_env "PROXY_ONLY" "${PROXY_ONLY:-true}" "$env_file"
   ensure_env "TRUSTED_PROXY_SECRET" "$(random_hex 32)" "$env_file"
-  ensure_env "OUTBOUND_PROXY_URL" "${OUTBOUND_PROXY_URL:-}" "$env_file"
-  ensure_env "HTTP_PROXY" "${HTTP_PROXY:-}" "$env_file"
-  ensure_env "HTTPS_PROXY" "${HTTPS_PROXY:-}" "$env_file"
   ensure_env "NO_PROXY" "${NO_PROXY:-localhost,127.0.0.1,db,app,cloudops-db,cloudops-app}" "$env_file"
-  ensure_env "ACCESS_ALLOWED_IPS" "${ACCESS_ALLOWED_IPS:-}" "$env_file"
+  if [ -n "$ACCESS_ALLOWED_IPS" ]; then
+    upsert_env "ACCESS_ALLOWED_IPS" "$ACCESS_ALLOWED_IPS" "$env_file"
+  else
+    ensure_env "ACCESS_ALLOWED_IPS" "" "$env_file"
+  fi
   ensure_env "PROVIDER_CREDENTIALS_SECRET" "$(random_hex 32)" "$env_file"
   ensure_env "SEED_DEMO_TRACKING_DATA" "${SEED_DEMO_TRACKING_DATA:-false}" "$env_file"
   ensure_env "OPENROUTER_API_KEY" "${OPENROUTER_API_KEY:-}" "$env_file"
@@ -383,6 +385,12 @@ main() {
   printf 'URL:   https://%s\n' "$DOMAIN"
   printf 'Admin: %s\n' "$ADMIN_EMAIL"
   printf 'Password is stored in: %s/.env as ADMIN_PASSWORD\n' "$APP_DIR"
+  if [ -n "$ACCESS_ALLOWED_IPS" ]; then
+    printf 'Whitelist: ACCESS_ALLOWED_IPS=%s\n' "$ACCESS_ALLOWED_IPS"
+  else
+    printf 'Whitelist: not configured. To restrict access, rerun with ACCESS_ALLOWED_IPS="YOUR_PUBLIC_IP" or edit %s/.env.\n' "$APP_DIR"
+  fi
+  printf 'Note: OUTBOUND_PROXY_URL is optional and only controls app outgoing internet requests. It is not needed for access protection.\n'
   printf '\nImportant: change the seeded admin password after first login.\n'
 }
 
