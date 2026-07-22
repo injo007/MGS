@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { getUnreadNotifications, markNotificationsRead } from "@/lib/notifications";
 import { db } from "@/db";
 import { tasks, users } from "@/db/schema";
-import { and, desc, eq, isNull, not, or } from "drizzle-orm";
+import { and, desc, eq, isNull, not, or, sql } from "drizzle-orm";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
 
 export async function GET() {
@@ -21,6 +21,7 @@ export async function GET() {
         description: tasks.description,
         assignedUserId: tasks.assignedUserId,
         assignedUserName: users.name,
+        createdById: tasks.createdById,
         priority: tasks.priority,
         status: tasks.status,
         createdAt: tasks.createdAt,
@@ -29,15 +30,17 @@ export async function GET() {
       .leftJoin(users, eq(tasks.assignedUserId, users.id))
       .where(
         and(
-          eq(tasks.priority, "urgent"),
           not(eq(tasks.status, "completed")),
           not(eq(tasks.status, "cancelled")),
           isAdmin(session)
-            ? undefined
-            : or(eq(tasks.assignedUserId, sessionUserId(session)), isNull(tasks.assignedUserId))
+            ? eq(tasks.priority, "urgent")
+            : or(
+                and(eq(tasks.priority, "urgent"), or(eq(tasks.assignedUserId, sessionUserId(session)), isNull(tasks.assignedUserId))),
+                eq(tasks.createdById, sessionUserId(session))
+              )
         )
       )
-      .orderBy(desc(tasks.createdAt))
+      .orderBy(desc(sql`case when ${tasks.priority} = 'urgent' then 1 else 0 end`), desc(tasks.createdAt))
       .limit(5),
   ]);
 

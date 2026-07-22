@@ -53,6 +53,7 @@ interface UrgentTask {
   description: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
+  createdById: string | null;
   priority: string;
   status: string;
   createdAt: string;
@@ -153,6 +154,7 @@ export function TopNav({
   const userName = session?.user?.name ?? "Michael Scott";
   const userEmail = session?.user?.email ?? "";
   const userRole = (session?.user as Record<string, unknown>)?.roleName as string | undefined;
+  const currentUserId = (session?.user as Record<string, unknown>)?.id as string | undefined;
   const initials = userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 
   const segments = pathname.split("/").filter(Boolean);
@@ -167,17 +169,29 @@ export function TopNav({
     {urgentTask && (
       <Link
         href="/tasks"
-        className="flex min-h-[42px] items-center gap-3 border-b border-[#FCA5A5] bg-[#FEF2F2] px-5 text-[#991B1B] transition-colors hover:bg-[#FEE2E2]"
+        className={cn(
+          "flex min-h-[42px] items-center gap-3 border-b px-5 transition-colors",
+          urgentTask.priority === "urgent"
+            ? "border-[#FCA5A5] bg-[#FEF2F2] text-[#991B1B] hover:bg-[#FEE2E2]"
+            : "border-[#C7D2FE] bg-[#EEF2FF] text-[#3730A3] hover:bg-[#E0E7FF]"
+        )}
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#DC2626] text-white">
+        <span className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white",
+          urgentTask.priority === "urgent" ? "bg-[#DC2626]" : "bg-[#4F46E5]"
+        )}>
           <AlertTriangle className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-bold">
-            Urgent: {urgentTask.title}
+            {urgentTask.priority === "urgent" ? "Urgent" : "My Task"}: {urgentTask.title}
           </p>
-          <p className="truncate text-[12px] text-[#B91C1C]">
-            {urgentTask.assignedUserId ? `Assigned to ${urgentTask.assignedUserName || "user"}` : "Public announcement"} · Open in Tasks
+          <p className={cn("truncate text-[12px]", urgentTask.priority === "urgent" ? "text-[#B91C1C]" : "text-[#4338CA]")}>
+            {urgentTask.createdById === currentUserId
+              ? "Personal task / note"
+              : urgentTask.assignedUserId
+                ? `Assigned to ${urgentTask.assignedUserName || "user"}`
+                : "Public announcement"} · Open in Tasks
           </p>
         </div>
         <ChevronRight className="h-4 w-4 shrink-0" />
@@ -284,16 +298,24 @@ export function TopNav({
                   <Link
                     key={`urgent-${task.id}`}
                     href="/tasks"
-                    className="block border-b border-[#F1F5F9] bg-[#FEF2F2] p-3 transition-colors hover:bg-[#FEE2E2]"
+                    className={cn(
+                      "block border-b border-[#F1F5F9] p-3 transition-colors",
+                      task.priority === "urgent" ? "bg-[#FEF2F2] hover:bg-[#FEE2E2]" : "bg-[#EEF2FF] hover:bg-[#E0E7FF]"
+                    )}
                   >
                     <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#DC2626] text-white">
+                      <div className={cn(
+                        "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white",
+                        task.priority === "urgent" ? "bg-[#DC2626]" : "bg-[#4F46E5]"
+                      )}>
                         <AlertTriangle className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[13px] font-bold text-[#991B1B]">{task.title}</p>
-                        <p className="mt-0.5 line-clamp-2 text-[12px] text-[#B91C1C]">{task.description || (task.assignedUserId ? "Assigned urgent task" : "Public urgent announcement")}</p>
-                        <p className="mt-1 text-[11px] text-[#DC2626]">
+                        <p className={cn("text-[13px] font-bold", task.priority === "urgent" ? "text-[#991B1B]" : "text-[#3730A3]")}>{task.title}</p>
+                        <p className={cn("mt-0.5 line-clamp-2 text-[12px]", task.priority === "urgent" ? "text-[#B91C1C]" : "text-[#4338CA]")}>
+                          {task.description || (task.createdById === currentUserId ? "Personal task / note" : task.assignedUserId ? "Assigned urgent task" : "Public urgent announcement")}
+                        </p>
+                        <p className={cn("mt-1 text-[11px]", task.priority === "urgent" ? "text-[#DC2626]" : "text-[#4F46E5]")}>
                           {mounted ? timeAgo(task.createdAt) : ""}
                         </p>
                       </div>
