@@ -332,6 +332,9 @@ async function seed() {
       { key: "bounce_rate_critical", value: JSON.stringify(10) },
       { key: "complaint_rate_warning", value: JSON.stringify(0.1) },
       { key: "complaint_rate_critical", value: JSON.stringify(0.5) },
+      { key: "blacklist_provider", value: JSON.stringify("hetrixtools") },
+      { key: "hetrixtools_accounts", value: JSON.stringify([]) },
+      { key: "mxtoolbox_accounts", value: JSON.stringify([]) },
     ];
     for (const setting of defaultSettings) {
       await client`

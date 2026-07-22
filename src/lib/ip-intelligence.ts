@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { ipAddresses, servers, serverUsers, settings } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { isMxToolboxApiKey } from "@/lib/mxtoolbox";
+import { isBlacklistProvider, isHetrixToolsApiKey, type BlacklistProvider } from "@/lib/blacklist-providers";
 
 export type IpGeo = {
   ip: string;
@@ -30,7 +31,7 @@ export type BlacklistFinding = {
   error?: string;
 };
 
-type MxToolboxAccount = {
+type BlacklistAccount = {
   id: string;
   label: string;
   apiKey: string;
@@ -38,14 +39,14 @@ type MxToolboxAccount = {
   enabled: boolean;
 };
 
-type MxToolboxAssignee = string | string[] | null | undefined;
+type BlacklistAssignee = string | string[] | null | undefined;
 
 export type IpIntelligenceSnapshot = {
   ip: string;
   checkedAt: string;
   geo: IpGeo | null;
   blacklist: {
-    provider: "mxtoolbox" | "dnsbl";
+    provider: BlacklistProvider | "dnsbl";
     listed: boolean;
     listedCount: number;
     checkedCount: number;
@@ -306,7 +307,100 @@ async function checkMxtoolboxBlacklist(ip: string, apiKey: string) {
   };
 }
 
-async function getMxToolboxAccounts(): Promise<MxToolboxAccount[]> {
+function asHetrixToolsRecord(data: unknown): Record<string, unknown> {
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : {};
+}
+
+function hetrixToolsErrorMessage(data: unknown, status: number) {
+  const record = asHetrixToolsRecord(data);
+  const detail = record.error_message || record.message || record.error;
+  return detail ? String(detail) : `HetrixTools HTTP ${status}`;
+}
+
+async function readJsonResponse(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { error_message: text };
+  }
+}
+
+async function checkHetrixToolsBlacklist(ip: string, apiKey: string) {
+  if (!isHetrixToolsApiKey(apiKey)) {
+    throw new Error("Invalid API token format. Use the token from HetrixTools Account Settings > API Keys.");
+  }
+  if (!reverseIpv4(ip)) {
+    throw new Error("HetrixTools on-demand blacklist checks currently support IPv4 addresses only.");
+  }
+
+  const endpoint = `https://api.hetrixtools.com/v2/${encodeURIComponent(apiKey)}/blacklist-check/ipv4/${encodeURIComponent(ip)}/`;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(65_000),
+    });
+    const data = await readJsonResponse(res);
+    if (!res.ok) throw new Error(hetrixToolsErrorMessage(data, res.status));
+
+    const response = asHetrixToolsRecord(data);
+    const status = String(response.status || "").toUpperCase();
+    const errorMessage = hetrixToolsErrorMessage(data, res.status);
+    if (status === "ERROR" && errorMessage.toLowerCase().includes("in progress")) {
+      if (attempt === 5) {
+        throw new Error("HetrixTools blacklist check is still processing. Retry shortly to collect the cached result.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      continue;
+    }
+    if (status !== "SUCCESS") throw new Error(errorMessage);
+
+    const listedOn = Array.isArray(response.blacklisted_on) ? response.blacklisted_on : [];
+    const listedCount = Number(response.blacklisted_count ?? listedOn.length) || 0;
+    const apiCallsLeft = response.api_calls_left;
+    const checkCreditsLeft = response.blacklist_check_credits_left;
+    const links = asHetrixToolsRecord(response.links);
+    const quotaInfo = [
+      apiCallsLeft != null ? `API calls left: ${apiCallsLeft}` : null,
+      checkCreditsLeft != null ? `blacklist checks left: ${checkCreditsLeft}` : null,
+    ].filter(Boolean).join(" | ");
+    const findings: BlacklistFinding[] = listedOn.map((item) => {
+      const finding = asHetrixToolsRecord(item);
+      return {
+        source: "hetrixtools",
+        listed: true,
+        name: String(finding.rbl || "Blacklist"),
+        url: finding.delist ? String(finding.delist) : undefined,
+      };
+    });
+    if (quotaInfo) {
+      findings.push({
+        source: "hetrixtools",
+        listed: false,
+        name: "HetrixTools",
+        info: quotaInfo,
+        url: links.report_link ? String(links.report_link) : undefined,
+      });
+    }
+
+    return {
+      provider: "hetrixtools" as const,
+      listed: listedCount > 0,
+      listedCount,
+      checkedCount: Number(response.blacklists_checked ?? response.rbls_checked ?? listedOn.length) || 0,
+      findings,
+    };
+  }
+
+  throw new Error("HetrixTools blacklist check did not complete.");
+}
+
+async function getMxToolboxAccounts(): Promise<BlacklistAccount[]> {
   const savedAccounts = await getSetting<unknown>("mxtoolbox_accounts", []);
   const accounts = Array.isArray(savedAccounts)
     ? savedAccounts
@@ -322,7 +416,7 @@ async function getMxToolboxAccounts(): Promise<MxToolboxAccount[]> {
             enabled: row.enabled !== false,
           };
         })
-        .filter((account): account is MxToolboxAccount => Boolean(account))
+        .filter((account): account is BlacklistAccount => Boolean(account))
     : [];
 
   const legacyKey = ((await getSetting<string | null>("mxtoolbox_api_key", null)) || process.env.MXTOOLBOX_API_KEY || "").trim();
@@ -339,7 +433,28 @@ async function getMxToolboxAccounts(): Promise<MxToolboxAccount[]> {
   return accounts.filter((account) => account.enabled);
 }
 
-function normalizeMxToolboxAssignees(assignedUserId: MxToolboxAssignee) {
+async function getHetrixToolsAccounts(): Promise<BlacklistAccount[]> {
+  const savedAccounts = await getSetting<unknown>("hetrixtools_accounts", []);
+  if (!Array.isArray(savedAccounts)) return [];
+
+  return savedAccounts
+    .map((account) => {
+      const row = account as Record<string, unknown>;
+      const apiKey = String(row.apiKey || row.key || "").trim();
+      if (!apiKey) return null;
+      return {
+        id: String(row.id || apiKey.slice(-8) || crypto.randomUUID()),
+        label: String(row.label || row.name || "HetrixTools Account"),
+        apiKey,
+        assignedUserId: row.assignedUserId ? String(row.assignedUserId) : null,
+        enabled: row.enabled !== false,
+      };
+    })
+    .filter((account): account is BlacklistAccount => Boolean(account))
+    .filter((account) => account.enabled);
+}
+
+function normalizeBlacklistAssignees(assignedUserId: BlacklistAssignee) {
   if (Array.isArray(assignedUserId)) {
     return Array.from(new Set(assignedUserId.map((id) => String(id).trim()).filter(Boolean)));
   }
@@ -347,11 +462,11 @@ function normalizeMxToolboxAssignees(assignedUserId: MxToolboxAssignee) {
   return normalized ? [normalized] : [];
 }
 
-async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: MxToolboxAssignee) {
+async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: BlacklistAssignee) {
   if (assignedUserId === null) return null;
 
   const allAccounts = await getMxToolboxAccounts();
-  const assigneeIds = normalizeMxToolboxAssignees(assignedUserId);
+  const assigneeIds = normalizeBlacklistAssignees(assignedUserId);
   const accounts = assigneeIds.length > 0
     ? allAccounts.filter((account) => account.assignedUserId && assigneeIds.includes(account.assignedUserId))
     : allAccounts;
@@ -386,6 +501,48 @@ async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: MxTool
   return {
     ...fallback,
     error: `${assigneeIds.length > 0 ? "Assigned MxToolbox account failed" : "All MxToolbox accounts failed"}, used DNSBL fallback: ${errors.join("; ")}`,
+  };
+}
+
+async function checkHetrixToolsWithAccountPool(ip: string, assignedUserId?: BlacklistAssignee) {
+  if (assignedUserId === null) return null;
+
+  const allAccounts = await getHetrixToolsAccounts();
+  const assigneeIds = normalizeBlacklistAssignees(assignedUserId);
+  const accounts = assigneeIds.length > 0
+    ? allAccounts.filter((account) => account.assignedUserId && assigneeIds.includes(account.assignedUserId))
+    : allAccounts;
+
+  if (accounts.length === 0) return null;
+
+  const rotationKey = assigneeIds.length > 0
+    ? `hetrixtools_account_rotation_index_${assigneeIds.sort().join("_")}`
+    : "hetrixtools_account_rotation_index";
+  const startIndex = await getSetting<number>(rotationKey, 0);
+  const errors: string[] = [];
+
+  for (let offset = 0; offset < accounts.length; offset++) {
+    const index = (startIndex + offset) % accounts.length;
+    const account = accounts[index];
+    try {
+      const result = await checkHetrixToolsBlacklist(ip, account.apiKey);
+      await setSetting(rotationKey, (index + 1) % accounts.length);
+      return {
+        ...result,
+        findings: result.findings.map((finding) => ({
+          ...finding,
+          info: [finding.info, `HetrixTools account: ${account.label}`].filter(Boolean).join(" | "),
+        })),
+      };
+    } catch (err) {
+      errors.push(`${account.label}: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  }
+
+  const fallback = await checkDnsblBlacklist(ip);
+  return {
+    ...fallback,
+    error: `${assigneeIds.length > 0 ? "Assigned HetrixTools account failed" : "All HetrixTools accounts failed"}, used DNSBL fallback: ${errors.join("; ")}`,
   };
 }
 
@@ -426,27 +583,41 @@ async function checkDnsblBlacklist(ip: string) {
   };
 }
 
-export async function checkIpBlacklist(ip: string, assignedUserId?: MxToolboxAssignee) {
-  const pooledResult = await checkMxtoolboxWithAccountPool(ip, assignedUserId);
+export async function getDefaultBlacklistProvider(): Promise<BlacklistProvider> {
+  const configured = await getSetting<unknown>("blacklist_provider", "hetrixtools");
+  return isBlacklistProvider(configured) ? configured : "hetrixtools";
+}
+
+export async function checkIpBlacklist(ip: string, assignedUserId?: BlacklistAssignee, requestedProvider?: BlacklistProvider) {
+  const provider = requestedProvider || await getDefaultBlacklistProvider();
+  const pooledResult = provider === "hetrixtools"
+    ? await checkHetrixToolsWithAccountPool(ip, assignedUserId)
+    : await checkMxtoolboxWithAccountPool(ip, assignedUserId);
   if (pooledResult) return pooledResult;
 
   const fallback = await checkDnsblBlacklist(ip);
+  const providerLabel = provider === "hetrixtools" ? "HetrixTools" : "MxToolbox";
   if (assignedUserId === null) {
     return {
       ...fallback,
-      error: "This server has no assigned user with an enabled MxToolbox account, used DNSBL fallback.",
+      error: `This server has no assigned user with an enabled ${providerLabel} account, used DNSBL fallback.`,
     };
   }
-  if (normalizeMxToolboxAssignees(assignedUserId).length > 0) {
+  if (normalizeBlacklistAssignees(assignedUserId).length > 0) {
     return {
       ...fallback,
-      error: "No enabled MxToolbox account is assigned to any user on this server, used DNSBL fallback.",
+      error: `No enabled ${providerLabel} account is assigned to any user on this server, used DNSBL fallback.`,
     };
   }
   return fallback;
 }
 
-export async function enrichIpAddress(ipId: string, force = false, assignedUserId?: MxToolboxAssignee): Promise<IpIntelligenceSnapshot | null> {
+export async function enrichIpAddress(
+  ipId: string,
+  force = false,
+  assignedUserId?: BlacklistAssignee,
+  provider?: BlacklistProvider,
+): Promise<IpIntelligenceSnapshot | null> {
   const [row] = await db.select().from(ipAddresses).where(eq(ipAddresses.id, ipId)).limit(1);
   if (!row) return null;
 
@@ -455,7 +626,7 @@ export async function enrichIpAddress(ipId: string, force = false, assignedUserI
   if (!force && existing?.checkedAt?.startsWith(todayKey())) return existing;
 
   const geo = await lookupIpGeo(row.address);
-  const blacklist = await checkIpBlacklist(row.address, assignedUserId);
+  const blacklist = await checkIpBlacklist(row.address, assignedUserId, provider);
   const snapshot: IpIntelligenceSnapshot = {
     ip: row.address,
     checkedAt: new Date().toISOString(),
@@ -490,7 +661,8 @@ export async function enrichIpAddress(ipId: string, force = false, assignedUserI
   return snapshot;
 }
 
-export async function runDailyIpIntelligence(force = false) {
+export async function runDailyIpIntelligence(force = false, requestedProvider?: BlacklistProvider) {
+  const provider = requestedProvider || await getDefaultBlacklistProvider();
   const allIps = await db
     .select({ id: ipAddresses.id, address: ipAddresses.address, serverId: ipAddresses.serverId })
     .from(ipAddresses);
@@ -513,7 +685,7 @@ export async function runDailyIpIntelligence(force = false) {
 
   for (const ip of allIps) {
     try {
-      const snapshot = await enrichIpAddress(ip.id, force, assignedUsersByServer.get(ip.serverId) || null);
+      const snapshot = await enrichIpAddress(ip.id, force, assignedUsersByServer.get(ip.serverId) || null, provider);
       if (snapshot) results.push(snapshot);
     } catch (err) {
       errors.push({ ip: ip.address, error: err instanceof Error ? err.message : "Unknown error" });
@@ -550,7 +722,14 @@ export async function runDailyIpIntelligence(force = false) {
   };
 }
 
-export async function runIpIntelligenceForServers(serverIds: string[], force = true, userId?: string | null, fallbackUserId?: string | null) {
+export async function runIpIntelligenceForServers(
+  serverIds: string[],
+  force = true,
+  userId?: string | null,
+  fallbackUserId?: string | null,
+  requestedProvider?: BlacklistProvider,
+) {
+  const provider = requestedProvider || await getDefaultBlacklistProvider();
   const uniqueServerIds = Array.from(new Set(serverIds.map((id) => String(id).trim()).filter(Boolean)));
   if (uniqueServerIds.length === 0) {
     return {
@@ -595,7 +774,7 @@ export async function runIpIntelligenceForServers(serverIds: string[], force = t
         ...(fallbackUserId ? [fallbackUserId] : []),
       ]));
       const accountUserId = userId || (candidateUserIds.length > 0 ? candidateUserIds : null);
-      const snapshot = await enrichIpAddress(ip.id, force, accountUserId);
+      const snapshot = await enrichIpAddress(ip.id, force, accountUserId, provider);
       if (snapshot) results.push(snapshot);
     } catch (err) {
       errors.push({ ip: ip.address, error: err instanceof Error ? err.message : "Unknown error" });

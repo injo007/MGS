@@ -22,8 +22,14 @@ import {
   Upload,
 } from "lucide-react";
 import { isMxToolboxApiKey, MXTOOLBOX_API_KEY_HELP } from "@/lib/mxtoolbox";
+import {
+  BLACKLIST_PROVIDER_OPTIONS,
+  HETRIXTOOLS_API_KEY_HELP,
+  isHetrixToolsApiKey,
+  type BlacklistProvider,
+} from "@/lib/blacklist-providers";
 
-interface MxToolboxAccount {
+interface BlacklistAccount {
   id: string;
   label: string;
   apiKey: string;
@@ -62,7 +68,9 @@ interface SettingsData {
   smtp_from_email?: string;
   smtp_from_name?: string;
   mxtoolbox_api_key?: string;
-  mxtoolbox_accounts?: MxToolboxAccount[];
+  mxtoolbox_accounts?: BlacklistAccount[];
+  hetrixtools_accounts?: BlacklistAccount[];
+  blacklist_provider?: BlacklistProvider;
 }
 
 function maskApiKey(key: string | undefined): string {
@@ -120,6 +128,7 @@ export default function SettingsPage() {
   const [showTelegramToken, setShowTelegramToken] = useState(false);
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const [showMxToolboxKey, setShowMxToolboxKey] = useState(false);
+  const [showHetrixToolsKey, setShowHetrixToolsKey] = useState(false);
 
   const [inputOpenRouterKey, setInputOpenRouterKey] = useState("");
   const [inputTelegramToken, setInputTelegramToken] = useState("");
@@ -127,7 +136,11 @@ export default function SettingsPage() {
   const [inputMxToolboxKey, setInputMxToolboxKey] = useState("");
   const [inputMxToolboxLabel, setInputMxToolboxLabel] = useState("");
   const [inputMxToolboxUserId, setInputMxToolboxUserId] = useState("");
-  const [mxToolboxAccounts, setMxToolboxAccounts] = useState<MxToolboxAccount[]>([]);
+  const [mxToolboxAccounts, setMxToolboxAccounts] = useState<BlacklistAccount[]>([]);
+  const [inputHetrixToolsKey, setInputHetrixToolsKey] = useState("");
+  const [inputHetrixToolsLabel, setInputHetrixToolsLabel] = useState("");
+  const [inputHetrixToolsUserId, setInputHetrixToolsUserId] = useState("");
+  const [hetrixToolsAccounts, setHetrixToolsAccounts] = useState<BlacklistAccount[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
 
   const [testChatId, setTestChatId] = useState("");
@@ -171,8 +184,11 @@ export default function SettingsPage() {
         smtp_from_name: json.smtp_from_name || "ServerOps CRM",
         mxtoolbox_api_key: json.mxtoolbox_api_key || "",
         mxtoolbox_accounts: Array.isArray(json.mxtoolbox_accounts) ? json.mxtoolbox_accounts : [],
+        hetrixtools_accounts: Array.isArray(json.hetrixtools_accounts) ? json.hetrixtools_accounts : [],
+        blacklist_provider: json.blacklist_provider === "mxtoolbox" ? "mxtoolbox" : "hetrixtools",
       });
       setMxToolboxAccounts(Array.isArray(json.mxtoolbox_accounts) ? json.mxtoolbox_accounts : []);
+      setHetrixToolsAccounts(Array.isArray(json.hetrixtools_accounts) ? json.hetrixtools_accounts : []);
       const usersRes = await fetch("/api/users?all=1");
       if (usersRes.ok) {
         const usersJson = await usersRes.json();
@@ -193,7 +209,7 @@ export default function SettingsPage() {
     setSettings((prev) => ({ ...prev, [key]: value }));
   }
 
-  function buildMxToolboxDraft(): MxToolboxAccount | null {
+  function buildMxToolboxDraft(): BlacklistAccount | null {
     const apiKey = inputMxToolboxKey.trim();
     if (!apiKey) return null;
     if (!isMxToolboxApiKey(apiKey)) {
@@ -229,6 +245,43 @@ export default function SettingsPage() {
     clearMxToolboxDraft();
     toast.success("MxToolbox account added", {
       description: "Click Save MxToolbox Accounts to store the updated account list.",
+    });
+  }
+
+  function buildHetrixToolsDraft(): BlacklistAccount | null {
+    const apiKey = inputHetrixToolsKey.trim();
+    if (!apiKey) return null;
+    if (!isHetrixToolsApiKey(apiKey)) {
+      toast.error("Invalid HetrixTools API token", { description: HETRIXTOOLS_API_KEY_HELP });
+      return null;
+    }
+    if (hetrixToolsAccounts.some((account) => account.apiKey === apiKey)) {
+      toast.error("This HetrixTools API token is already in the account list");
+      return null;
+    }
+    return {
+      id: crypto.randomUUID(),
+      label: inputHetrixToolsLabel.trim() || `HetrixTools Account ${hetrixToolsAccounts.length + 1}`,
+      apiKey,
+      assignedUserId: inputHetrixToolsUserId || null,
+      enabled: true,
+    };
+  }
+
+  function clearHetrixToolsDraft() {
+    setInputHetrixToolsKey("");
+    setInputHetrixToolsLabel("");
+    setInputHetrixToolsUserId("");
+    setShowHetrixToolsKey(false);
+  }
+
+  function handleAddHetrixToolsAccount() {
+    const account = buildHetrixToolsDraft();
+    if (!account) return;
+    setHetrixToolsAccounts((current) => [...current, account]);
+    clearHetrixToolsDraft();
+    toast.success("HetrixTools account added", {
+      description: "Click Save IP Intelligence Settings to store the updated account list.",
     });
   }
 
@@ -299,7 +352,16 @@ export default function SettingsPage() {
           accountsToSave = [...mxToolboxAccounts, draft];
           setMxToolboxAccounts(accountsToSave);
         }
+        let hetrixAccountsToSave = hetrixToolsAccounts;
+        if (inputHetrixToolsKey) {
+          const draft = buildHetrixToolsDraft();
+          if (!draft) return;
+          hetrixAccountsToSave = [...hetrixToolsAccounts, draft];
+          setHetrixToolsAccounts(hetrixAccountsToSave);
+        }
         payload.mxtoolbox_accounts = accountsToSave;
+        payload.hetrixtools_accounts = hetrixAccountsToSave;
+        payload.blacklist_provider = settings.blacklist_provider || "hetrixtools";
         break;
       default:
         return;
@@ -336,6 +398,9 @@ export default function SettingsPage() {
       if (section === "ip" && inputMxToolboxKey) {
         clearMxToolboxDraft();
       }
+      if (section === "ip" && inputHetrixToolsKey) {
+        clearHetrixToolsDraft();
+      }
 
       toast.success("Settings saved", {
         description: section === "ai"
@@ -345,7 +410,7 @@ export default function SettingsPage() {
           : section === "smtp"
           ? "SMTP settings saved for system emails."
           : section === "ip"
-          ? `${payload.mxtoolbox_accounts?.length || 0} MxToolbox account${(payload.mxtoolbox_accounts?.length || 0) === 1 ? "" : "s"} saved.`
+          ? `${payload.hetrixtools_accounts?.length || 0} HetrixTools and ${payload.mxtoolbox_accounts?.length || 0} MxToolbox accounts saved.`
           : `${section.charAt(0).toUpperCase() + section.slice(1)} settings updated successfully.`,
       });
     } catch (err: any) {
@@ -1045,6 +1110,125 @@ export default function SettingsPage() {
                 <p className="text-[13px] text-[#6B7280] mt-0.5">Configure blacklist checks and IP reputation lookups</p>
               </div>
               <div className="p-5 space-y-4">
+                <div className="grid gap-2 border-b border-[#E5E7EB] pb-4 md:grid-cols-[220px_1fr] md:items-center">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#111827]">Automatic check provider</p>
+                    <p className="mt-0.5 text-[12px] text-[#6B7280]">Used for new server IPs and scheduled daily checks.</p>
+                  </div>
+                  <select
+                    value={settings.blacklist_provider || "hetrixtools"}
+                    onChange={(event) => update("blacklist_provider", event.target.value as BlacklistProvider)}
+                    className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] font-semibold text-[#374151]"
+                  >
+                    {BLACKLIST_PROVIDER_OPTIONS.map((provider) => (
+                      <option key={provider.value} value={provider.value}>{provider.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-[10px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[12px] font-semibold uppercase text-[#6B7280]">HetrixTools Accounts</p>
+                      <p className="mt-0.5 text-[12px] text-[#6B7280]">{hetrixToolsAccounts.length} account{hetrixToolsAccounts.length === 1 ? "" : "s"} configured</p>
+                    </div>
+                    <span className="rounded-[5px] bg-white px-2 py-1 text-[11px] font-semibold text-[#15803D] ring-1 ring-[#E5E7EB]">Per-user keys</span>
+                  </div>
+                  {hetrixToolsAccounts.length === 0 ? (
+                    <div className="rounded-[8px] border border-dashed border-[#CBD5E1] bg-white p-4 text-center">
+                      <p className="text-[13px] font-semibold text-[#111827]">No HetrixTools accounts yet</p>
+                      <p className="mt-1 text-[12px] text-[#6B7280]">Add an API token below and assign it to its application user.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {hetrixToolsAccounts.map((account) => (
+                        <div key={account.id} className="grid gap-2 rounded-[8px] border border-[#E5E7EB] bg-white p-3 lg:grid-cols-[1fr_180px_90px_80px] lg:items-center">
+                          <div className="min-w-0">
+                            <p className="truncate text-[13px] font-semibold text-[#111827]">{account.label}</p>
+                            <p className="truncate text-[12px] text-[#6B7280]">{maskApiKey(account.apiKey)}</p>
+                            {!isHetrixToolsApiKey(account.apiKey) && (
+                              <p className="mt-1 text-[11px] font-semibold text-[#DC2626]">Invalid API token format</p>
+                            )}
+                          </div>
+                          <select
+                            value={account.assignedUserId || ""}
+                            onChange={(event) => {
+                              const assignedUserId = event.target.value || null;
+                              setHetrixToolsAccounts((current) => current.map((item) => item.id === account.id ? { ...item, assignedUserId } : item));
+                            }}
+                            className="h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#374151]"
+                          >
+                            <option value="">Unassigned</option>
+                            {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                          </select>
+                          <label className="flex items-center gap-2 text-[12px] font-semibold text-[#374151]">
+                            <input
+                              type="checkbox"
+                              checked={account.enabled}
+                              onChange={(event) => {
+                                const enabled = event.target.checked;
+                                setHetrixToolsAccounts((current) => current.map((item) => item.id === account.id ? { ...item, enabled } : item));
+                              }}
+                              className="h-4 w-4 rounded border-[#D1D5DB] text-[#4F46E5] focus:ring-[#4F46E5]/20"
+                            />
+                            Enabled
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setHetrixToolsAccounts((current) => current.filter((item) => item.id !== account.id))}
+                            className="flex h-[30px] items-center justify-center gap-1 rounded-[7px] border border-[#FECACA] px-2 text-[12px] font-semibold text-[#DC2626]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 border-b border-[#E5E7EB] pb-4">
+                  <label className="text-[13px] font-medium text-[#374151]">Add HetrixTools Account</label>
+                  <input
+                    className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                    placeholder="Account label, e.g. Marouane HetrixTools"
+                    value={inputHetrixToolsLabel}
+                    onChange={(event) => setInputHetrixToolsLabel(event.target.value)}
+                  />
+                  <div className="relative">
+                    <input
+                      type={showHetrixToolsKey ? "text" : "password"}
+                      className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 pr-9 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                      placeholder="HetrixTools API token"
+                      value={inputHetrixToolsKey}
+                      onChange={(event) => setInputHetrixToolsKey(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#111827]"
+                      onClick={() => setShowHetrixToolsKey(!showHetrixToolsKey)}
+                    >
+                      {showHetrixToolsKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[12px] leading-relaxed text-[#6B7280]">{HETRIXTOOLS_API_KEY_HELP}</p>
+                  <select
+                    value={inputHetrixToolsUserId}
+                    onChange={(event) => setInputHetrixToolsUserId(event.target.value)}
+                    className="h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151]"
+                  >
+                    <option value="">Assign to user...</option>
+                    {users.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddHetrixToolsAccount}
+                    disabled={!inputHetrixToolsKey.trim()}
+                    className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-[#15803D] bg-white px-3.5 text-[13px] font-semibold text-[#15803D] transition-colors hover:bg-[#ECFDF5] disabled:cursor-not-allowed disabled:border-[#E5E7EB] disabled:text-[#9CA3AF]"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Account To List
+                  </button>
+                </div>
+
                 <div className="rounded-[10px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
@@ -1166,12 +1350,12 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="rounded-[7px] bg-[#F9FAFB] border border-[#E5E7EB] p-3 text-[13px] text-[#6B7280] leading-relaxed">
-                  Blacklist checks use the enabled MxToolbox API key assigned to the server user. When a key is invalid, its Network quota is unavailable, or MxToolbox rejects the lookup, the app reports the exact API and quota response and completes the check with DNSBL fallback.
+                  Blacklist checks use an enabled account for the selected provider assigned to the server user. HetrixTools checks may continue processing briefly and expose remaining check credits in their result. Provider failures are reported and completed with DNSBL fallback.
                 </div>
 
                 <button onClick={() => handleSave("ip")} disabled={savingIp} className="h-[34px] rounded-[7px] bg-[#4F46E5] hover:bg-[#4338CA] px-3.5 text-[13px] font-medium text-white transition-colors disabled:opacity-50">
                   {savingIp ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin inline" /> : <Save className="h-3.5 w-3.5 mr-2 inline" />}
-                  {savingIp ? "Saving..." : "Save MxToolbox Accounts"}
+                  {savingIp ? "Saving..." : "Save IP Intelligence Settings"}
                 </button>
               </div>
             </div>

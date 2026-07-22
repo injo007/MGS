@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { ProviderLogo } from "@/components/shared/provider-logo";
 import { SERVER_STATUSES } from "@/lib/constants";
+import { BLACKLIST_PROVIDER_OPTIONS, type BlacklistProvider } from "@/lib/blacklist-providers";
 import {
   CalendarClock,
   CheckSquare,
@@ -271,6 +272,7 @@ function ServersPageContent() {
   const [deletingServers, setDeletingServers] = useState<Record<string, boolean>>({});
   const [detectingRegions, setDetectingRegions] = useState(false);
   const [checkingBlacklist, setCheckingBlacklist] = useState(false);
+  const [blacklistProvider, setBlacklistProvider] = useState<BlacklistProvider>("hetrixtools");
   const [deletingStatistics, setDeletingStatistics] = useState(false);
   const [form, setForm] = useState({
     providerId: "",
@@ -358,10 +360,14 @@ function ServersPageContent() {
     Promise.all([
       fetch("/api/providers?pageSize=1000&sortBy=name&sortOrder=asc").then((r) => r.json()),
       admin ? fetch("/api/users?all=1").then((r) => r.json()) : Promise.resolve({ data: [] }),
+      fetch("/api/ip-intelligence/run").then((r) => r.json()),
     ])
-      .then(([providerJson, userJson]) => {
+      .then(([providerJson, userJson, blacklistJson]) => {
         setProviders(providerJson.data ?? []);
         setUsers(userJson.data ?? []);
+        if (blacklistJson.provider === "mxtoolbox" || blacklistJson.provider === "hetrixtools") {
+          setBlacklistProvider(blacklistJson.provider);
+        }
       })
       .catch(() => {});
   }, [admin, fetchServers]);
@@ -627,11 +633,12 @@ function ServersPageContent() {
 
   const showBlacklistWarnings = (warnings: Array<{ message?: string }>) => {
     if (warnings.length === 0) return;
-    const mxtoolboxWarnings = warnings.filter((warning) =>
-      String(warning.message || "").toLowerCase().includes("mxtoolbox"),
-    );
-    const sample = mxtoolboxWarnings[0] || warnings[0];
-    toast.warning(mxtoolboxWarnings.length > 0 ? "MxToolbox API issue" : "Blacklist check warning", {
+    const providerWarnings = warnings.filter((warning) => {
+      const message = String(warning.message || "").toLowerCase();
+      return message.includes("mxtoolbox") || message.includes("hetrixtools");
+    });
+    const sample = providerWarnings[0] || warnings[0];
+    toast.warning(providerWarnings.length > 0 ? "Blacklist provider issue" : "Blacklist check warning", {
       description: `${warnings.length} warning${warnings.length === 1 ? "" : "s"}. ${sample.message || "Review blacklist check settings."}`,
       duration: 12000,
     });
@@ -649,11 +656,12 @@ function ServersPageContent() {
       const res = await fetch("/api/ip-intelligence/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true, serverIds: targetServerIds }),
+        body: JSON.stringify({ force: true, serverIds: targetServerIds, provider: blacklistProvider }),
       });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      toast.success(`${successLabel}: ${result.checked ?? 0} IPs checked, ${result.listed ?? 0} listed`);
+      const providerLabel = BLACKLIST_PROVIDER_OPTIONS.find((option) => option.value === blacklistProvider)?.label || blacklistProvider;
+      toast.success(`${successLabel} with ${providerLabel}: ${result.checked ?? 0} IPs checked, ${result.listed ?? 0} listed`);
       const warnings = Array.isArray(result.blacklistWarnings) ? result.blacklistWarnings : [];
       showBlacklistWarnings(warnings);
       fetchServers();
@@ -825,16 +833,27 @@ function ServersPageContent() {
                 <RefreshCw className={`h-3.5 w-3.5 ${detectingRegions ? "animate-spin" : ""}`} />
                 {detectingRegions ? "Detecting..." : "Detect regions"}
               </button>
-              <button
-                onClick={() => runBlacklistCheck()}
-                disabled={checkingBlacklist}
-                className="inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] px-3 text-[12px] font-semibold text-[#4F46E5] hover:bg-[#E0E7FF] disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${checkingBlacklist ? "animate-spin" : ""}`} />
-                {checkingBlacklist ? "Checking..." : selected.length > 0 ? `Check selected (${selected.length})` : "Check selected"}
-              </button>
             </>
           )}
+          <select
+            value={blacklistProvider}
+            onChange={(event) => setBlacklistProvider(event.target.value as BlacklistProvider)}
+            disabled={checkingBlacklist}
+            aria-label="Blacklist provider"
+            className={`${admin ? "" : "ml-auto"} h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] disabled:opacity-60`}
+          >
+            {BLACKLIST_PROVIDER_OPTIONS.map((provider) => (
+              <option key={provider.value} value={provider.value}>{provider.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => runBlacklistCheck()}
+            disabled={checkingBlacklist || selected.length === 0}
+            className="inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] px-3 text-[12px] font-semibold text-[#4F46E5] hover:bg-[#E0E7FF] disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${checkingBlacklist ? "animate-spin" : ""}`} />
+            {checkingBlacklist ? "Checking..." : selected.length > 0 ? `Check selected (${selected.length})` : "Check selected"}
+          </button>
           <button className="flex h-[34px] w-[34px] items-center justify-center rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] text-[#4F46E5]">
             <List className="h-4 w-4" />
           </button>

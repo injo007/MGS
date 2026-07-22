@@ -119,7 +119,14 @@ export async function POST(request: Request) {
     .values(body)
     .returning();
 
-  const intelligence = await enrichIpAddress(created.id).catch(() => null);
+  const assignments = await db
+    .select({ userId: serverUsers.userId })
+    .from(serverUsers)
+    .where(eq(serverUsers.serverId, String(body.serverId)));
+  const blacklistUserIds = assignments.length > 0
+    ? assignments.map((assignment) => assignment.userId)
+    : sessionUserId(session);
+  const intelligence = await enrichIpAddress(created.id, true, blacklistUserIds).catch(() => null);
 
   await db.insert(auditLogs).values({
     userId: session.user.id,
