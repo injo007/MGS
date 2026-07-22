@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./sidebar";
 import { TopNav } from "./top-nav";
 import { ChatProvider } from "@/components/ai/chat-provider";
+import { LiveLogPanel } from "@/components/logs/live-log-panel";
 
 const SIDEBAR_KEY = "cloudops-sidebar-collapsed";
 
@@ -69,6 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="px-4 py-5 sm:px-6">{children}</div>
         </main>
       </div>
+      <LiveLogPanel />
       <ChatProvider />
     </div>
   );
