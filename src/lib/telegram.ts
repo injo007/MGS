@@ -65,7 +65,8 @@ export interface ParsedTelegramUpdate {
 
 async function getSettingValue(key: string): Promise<string> {
   const [row] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, key)).limit(1);
-  return typeof row?.value === "string" ? row.value : "";
+  if (row?.value == null) return "";
+  return typeof row.value === "string" ? row.value : String(row.value);
 }
 
 export async function getTelegramBotToken(): Promise<string> {
@@ -110,8 +111,8 @@ export async function sendTelegramMessage(chatId: string, text: string, options?
   return { messageId: data.result?.message_id };
 }
 
-export async function sendTelegramAlert(text: string, options?: { parseMode?: "Markdown" | "HTML" | null }): Promise<boolean> {
-  const chatId = await getTelegramAlertChatId();
+export async function sendTelegramAlert(text: string, options?: { parseMode?: "Markdown" | "HTML" | null; chatId?: string | null }): Promise<boolean> {
+  const chatId = options?.chatId || await getTelegramAlertChatId();
   if (!chatId) throw new Error("Telegram alert chat ID is not configured");
   await sendTelegramMessage(chatId, text, options);
   return true;
@@ -124,7 +125,7 @@ export async function sendAuditTelegramAlert(input: {
   actorEmail?: string | null;
   entityName?: string | null;
   entityDetail?: string | null;
-}, options?: { throwOnError?: boolean }) {
+}, options?: { throwOnError?: boolean; chatId?: string | null }) {
   try {
     const actionLabels = {
       login: "User Login",
@@ -146,7 +147,7 @@ export async function sendAuditTelegramAlert(input: {
       input.actorName || input.actorEmail ? `By: ${input.actorName || input.actorEmail}${input.actorEmail ? ` (${input.actorEmail})` : ""}` : null,
       `Time: ${new Date().toLocaleString("en-US", { timeZone: "UTC" })} UTC`,
     ].filter(Boolean);
-    await sendTelegramAlert(lines.join("\n"), { parseMode: null });
+    await sendTelegramAlert(lines.join("\n"), { parseMode: null, chatId: options?.chatId });
   } catch (error) {
     console.error("[telegram] audit alert failed", error);
     if (options?.throwOnError) throw error;

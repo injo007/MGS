@@ -428,12 +428,21 @@ export default function SettingsPage() {
   }
 
   async function sendAuditTestTelegramMessage() {
+    if (!settings.telegram_alert_chat_id && !testChatId) {
+      toast.error("Alert Chat ID is required", {
+        description: "Enter the chat ID returned by /chatid, then run the audit alert test again.",
+      });
+      return;
+    }
     setSendingAuditTest(true);
     try {
       const res = await fetch("/api/webhooks/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_audit_test" }),
+        body: JSON.stringify({
+          action: "send_audit_test",
+          chat_id: settings.telegram_alert_chat_id || testChatId || undefined,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

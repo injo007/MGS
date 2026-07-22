@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, tasks, auditLogs } from "@/db/schema";
+import { providers, tasks, auditLogs, settings } from "@/db/schema";
 import { count, desc, eq } from "drizzle-orm";
 import { sendAuditTelegramAlert, sendTelegramMessage, parseTelegramUpdate, setTelegramWebhook } from "@/lib/telegram";
 import { isAdmin } from "@/lib/access-control";
@@ -25,6 +25,15 @@ export async function POST(request: Request) {
       }
 
       if (rawUpdate.action === "send_audit_test") {
+        const chatId = rawUpdate.chat_id ? String(rawUpdate.chat_id).trim() : "";
+        if (chatId) {
+          const [existing] = await db.select().from(settings).where(eq(settings.key, "telegram_alert_chat_id")).limit(1);
+          if (existing) {
+            await db.update(settings).set({ value: chatId, updatedAt: new Date() }).where(eq(settings.key, "telegram_alert_chat_id"));
+          } else {
+            await db.insert(settings).values({ key: "telegram_alert_chat_id", value: chatId });
+          }
+        }
         await sendAuditTelegramAlert({
           action: "create",
           entityType: "server",
@@ -32,7 +41,7 @@ export async function POST(request: Request) {
           actorEmail: session.user.email,
           entityName: "Telegram audit alert test",
           entityDetail: "Settings test",
-        }, { throwOnError: true });
+        }, { throwOnError: true, chatId });
         return NextResponse.json({ ok: true });
       }
 
