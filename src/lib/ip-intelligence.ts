@@ -190,16 +190,60 @@ export async function lookupIpGeo(ip: string): Promise<IpGeo | null> {
   }
 }
 
+async function readMxToolboxResponse(res: Response) {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { Message: text };
+  }
+}
+
+function formatMxToolboxUsage(data: Record<string, unknown> | null) {
+  if (!data) return null;
+  const dnsRequests = data.DnsRequests ?? data.dnsRequests;
+  const dnsMax = data.DnsMax ?? data.dnsMax;
+  const networkRequests = data.NetworkRequests ?? data.networkRequests;
+  const networkMax = data.NetworkMax ?? data.networkMax;
+  const parts = [
+    dnsRequests != null || dnsMax != null ? `DNS ${dnsRequests ?? "?"}/${dnsMax ?? "?"}` : null,
+    networkRequests != null || networkMax != null ? `Network ${networkRequests ?? "?"}/${networkMax ?? "?"}` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? `Usage: ${parts.join(", ")}` : null;
+}
+
+async function getMxToolboxUsage(apiKey: string) {
+  try {
+    const res = await fetch("https://api.mxtoolbox.com/api/v1/Usage", {
+      headers: {
+        Accept: "application/json",
+        Authorization: apiKey,
+      },
+      cache: "no-store",
+    });
+    const data = await readMxToolboxResponse(res);
+    if (!res.ok) return `Usage API unavailable: ${data.Message || data.Error || `HTTP ${res.status}`}`;
+    return formatMxToolboxUsage(data) || "Usage API returned no quota details";
+  } catch (err) {
+    return `Usage API unavailable: ${err instanceof Error ? err.message : "unknown error"}`;
+  }
+}
+
 async function checkMxtoolboxBlacklist(ip: string, apiKey: string) {
-  const res = await fetch(`https://mxtoolbox.com/api/v1/lookup/blacklist/${encodeURIComponent(ip)}`, {
+  const res = await fetch(`https://api.mxtoolbox.com/api/v1/Lookup/blacklist/?argument=${encodeURIComponent(ip)}`, {
     headers: {
       Accept: "application/json",
       Authorization: apiKey,
     },
     cache: "no-store",
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.Message || data?.Error || `MxToolbox HTTP ${res.status}`);
+  const data = await readMxToolboxResponse(res);
+  if (!res.ok) {
+    const usage = res.status === 429 ? await getMxToolboxUsage(apiKey) : null;
+    const detail = data.Message || data.Error || data.error || `MxToolbox HTTP ${res.status}`;
+    throw new Error([detail, usage].filter(Boolean).join(" | "));
+  }
 
   const failed = Array.isArray(data.Failed) ? data.Failed : [];
   const warnings = Array.isArray(data.Warnings) ? data.Warnings : [];
