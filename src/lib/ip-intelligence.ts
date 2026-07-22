@@ -263,11 +263,20 @@ async function getMxToolboxAccounts(): Promise<MxToolboxAccount[]> {
   return accounts.filter((account) => account.enabled);
 }
 
-async function checkMxtoolboxWithAccountPool(ip: string) {
-  const accounts = await getMxToolboxAccounts();
+async function checkMxtoolboxWithAccountPool(ip: string, assignedUserId?: string | null) {
+  if (assignedUserId === null) return null;
+
+  const allAccounts = await getMxToolboxAccounts();
+  const accounts = assignedUserId
+    ? allAccounts.filter((account) => account.assignedUserId === assignedUserId)
+    : allAccounts;
+
   if (accounts.length === 0) return null;
 
-  const startIndex = await getSetting<number>("mxtoolbox_account_rotation_index", 0);
+  const rotationKey = assignedUserId
+    ? `mxtoolbox_account_rotation_index_${assignedUserId}`
+    : "mxtoolbox_account_rotation_index";
+  const startIndex = await getSetting<number>(rotationKey, 0);
   const errors: string[] = [];
 
   for (let offset = 0; offset < accounts.length; offset++) {
@@ -275,7 +284,7 @@ async function checkMxtoolboxWithAccountPool(ip: string) {
     const account = accounts[index];
     try {
       const result = await checkMxtoolboxBlacklist(ip, account.apiKey);
-      await setSetting("mxtoolbox_account_rotation_index", (index + 1) % accounts.length);
+      await setSetting(rotationKey, (index + 1) % accounts.length);
       return {
         ...result,
         findings: result.findings.map((finding) => ({
@@ -291,7 +300,7 @@ async function checkMxtoolboxWithAccountPool(ip: string) {
   const fallback = await checkDnsblBlacklist(ip);
   return {
     ...fallback,
-    error: `All MxToolbox accounts failed, used DNSBL fallback: ${errors.join("; ")}`,
+    error: `${assignedUserId ? "Assigned MxToolbox account failed" : "All MxToolbox accounts failed"}, used DNSBL fallback: ${errors.join("; ")}`,
   };
 }
 
@@ -332,14 +341,27 @@ async function checkDnsblBlacklist(ip: string) {
   };
 }
 
-export async function checkIpBlacklist(ip: string) {
-  const pooledResult = await checkMxtoolboxWithAccountPool(ip);
+export async function checkIpBlacklist(ip: string, assignedUserId?: string | null) {
+  const pooledResult = await checkMxtoolboxWithAccountPool(ip, assignedUserId);
   if (pooledResult) return pooledResult;
 
-  return checkDnsblBlacklist(ip);
+  const fallback = await checkDnsblBlacklist(ip);
+  if (assignedUserId === null) {
+    return {
+      ...fallback,
+      error: "No user-specific MxToolbox account is available for this server, used DNSBL fallback.",
+    };
+  }
+  if (assignedUserId) {
+    return {
+      ...fallback,
+      error: "No enabled MxToolbox account is assigned to this server user, used DNSBL fallback.",
+    };
+  }
+  return fallback;
 }
 
-export async function enrichIpAddress(ipId: string, force = false): Promise<IpIntelligenceSnapshot | null> {
+export async function enrichIpAddress(ipId: string, force = false, assignedUserId?: string | null): Promise<IpIntelligenceSnapshot | null> {
   const [row] = await db.select().from(ipAddresses).where(eq(ipAddresses.id, ipId)).limit(1);
   if (!row) return null;
 
@@ -348,7 +370,7 @@ export async function enrichIpAddress(ipId: string, force = false): Promise<IpIn
   if (!force && existing?.checkedAt?.startsWith(todayKey())) return existing;
 
   const geo = await lookupIpGeo(row.address);
-  const blacklist = await checkIpBlacklist(row.address);
+  const blacklist = await checkIpBlacklist(row.address, assignedUserId);
   const snapshot: IpIntelligenceSnapshot = {
     ip: row.address,
     checkedAt: new Date().toISOString(),
@@ -385,15 +407,29 @@ export async function enrichIpAddress(ipId: string, force = false): Promise<IpIn
 
 export async function runDailyIpIntelligence(force = false) {
   const allIps = await db
-    .select({ id: ipAddresses.id, address: ipAddresses.address })
+    .select({ id: ipAddresses.id, address: ipAddresses.address, serverId: ipAddresses.serverId })
     .from(ipAddresses);
+  const serverIds = Array.from(new Set(allIps.map((ip) => ip.serverId)));
+  const assignmentRows = serverIds.length > 0
+    ? await db
+        .select({ serverId: serverUsers.serverId, userId: serverUsers.userId })
+        .from(serverUsers)
+        .where(inArray(serverUsers.serverId, serverIds))
+        .orderBy(serverUsers.createdAt)
+    : [];
+  const assignedUserByServer = new Map<string, string>();
+  for (const assignment of assignmentRows) {
+    if (!assignedUserByServer.has(assignment.serverId)) {
+      assignedUserByServer.set(assignment.serverId, assignment.userId);
+    }
+  }
 
   const results: IpIntelligenceSnapshot[] = [];
   const errors: Array<{ ip: string; error: string }> = [];
 
   for (const ip of allIps) {
     try {
-      const snapshot = await enrichIpAddress(ip.id, force);
+      const snapshot = await enrichIpAddress(ip.id, force, assignedUserByServer.get(ip.serverId) || null);
       if (snapshot) results.push(snapshot);
     } catch (err) {
       errors.push({ ip: ip.address, error: err instanceof Error ? err.message : "Unknown error" });
@@ -451,13 +487,27 @@ export async function runIpIntelligenceForServers(serverIds: string[], force = t
     .select({ id: ipAddresses.id, address: ipAddresses.address, serverId: ipAddresses.serverId })
     .from(ipAddresses)
     .where(and(...conditions));
+  const assignmentRows = userId
+    ? []
+    : await db
+        .select({ serverId: serverUsers.serverId, userId: serverUsers.userId })
+        .from(serverUsers)
+        .where(inArray(serverUsers.serverId, uniqueServerIds))
+        .orderBy(serverUsers.createdAt);
+  const assignedUserByServer = new Map<string, string>();
+  for (const assignment of assignmentRows) {
+    if (!assignedUserByServer.has(assignment.serverId)) {
+      assignedUserByServer.set(assignment.serverId, assignment.userId);
+    }
+  }
 
   const results: IpIntelligenceSnapshot[] = [];
   const errors: Array<{ ip: string; error: string }> = [];
 
   for (const ip of targetIps) {
     try {
-      const snapshot = await enrichIpAddress(ip.id, force);
+      const accountUserId = userId || assignedUserByServer.get(ip.serverId) || null;
+      const snapshot = await enrichIpAddress(ip.id, force, accountUserId);
       if (snapshot) results.push(snapshot);
     } catch (err) {
       errors.push({ ip: ip.address, error: err instanceof Error ? err.message : "Unknown error" });

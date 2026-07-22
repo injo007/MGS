@@ -47,7 +47,7 @@ function cleanIpAddressList(value: unknown) {
   );
 }
 
-async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null) {
+async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null, blacklistUserId?: string | null) {
   if (!addresses) return;
 
   const existing = await db
@@ -80,7 +80,7 @@ async function syncServerIpAddresses(serverId: string, providerId: string, addre
         status: "active",
       })
       .returning();
-    await enrichIpAddress(createdIp.id, true).catch(() => null);
+    await enrichIpAddress(createdIp.id, true, blacklistUserId).catch(() => null);
   }
 }
 
@@ -191,6 +191,21 @@ export async function PUT(
   const { assignedUserIds, ipAddresses: ipAddressValues, ...serverData } = body;
   const cleanedServerData = cleanServerPayload(serverData);
   const cleanedIpAddresses = cleanIpAddressList(ipAddressValues);
+  const requestedAssignedUserIds = Array.isArray(assignedUserIds) ? assignedUserIds : null;
+  const finalAssignedUserIds = requestedAssignedUserIds
+    ? isAdmin(session)
+      ? requestedAssignedUserIds
+      : Array.from(new Set([...requestedAssignedUserIds, sessionUserId(session)]))
+    : null;
+  let blacklistUserId = finalAssignedUserIds?.[0] || null;
+  if (!blacklistUserId) {
+    const [existingAssignment] = await db
+      .select({ userId: serverUsers.userId })
+      .from(serverUsers)
+      .where(eq(serverUsers.serverId, id))
+      .limit(1);
+    blacklistUserId = existingAssignment?.userId || sessionUserId(session);
+  }
 
   const [updated] = await db
     .update(servers)
@@ -198,16 +213,13 @@ export async function PUT(
     .where(eq(servers.id, id))
     .returning();
 
-  await syncServerIpAddresses(id, updated.providerId, cleanedIpAddresses);
+  await syncServerIpAddresses(id, updated.providerId, cleanedIpAddresses, blacklistUserId);
 
   // Update assigned users if provided
-  if (Array.isArray(assignedUserIds)) {
+  if (finalAssignedUserIds) {
     // Remove existing assignments
     await db.delete(serverUsers).where(eq(serverUsers.serverId, id));
     // Add new assignments
-    const finalAssignedUserIds = isAdmin(session)
-      ? assignedUserIds
-      : Array.from(new Set([...assignedUserIds, sessionUserId(session)]));
     for (const userId of finalAssignedUserIds) {
       await db.insert(serverUsers).values({ serverId: id, userId });
     }

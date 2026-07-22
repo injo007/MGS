@@ -1045,7 +1045,7 @@ export default function SettingsPage() {
                       <p className="mt-0.5 text-[12px] text-[#6B7280]">{mxToolboxAccounts.length} account{mxToolboxAccounts.length === 1 ? "" : "s"} configured</p>
                     </div>
                     <span className="rounded-[5px] bg-white px-2 py-1 text-[11px] font-semibold text-[#4F46E5] ring-1 ring-[#E5E7EB]">
-                      Rotating pool
+                      Per-user keys
                     </span>
                   </div>
                   {mxToolboxAccounts.length === 0 ? (
@@ -1151,7 +1151,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="rounded-[7px] bg-[#F9FAFB] border border-[#E5E7EB] p-3 text-[13px] text-[#6B7280] leading-relaxed">
-                  Blacklist checks rotate through enabled MxToolbox accounts to spread request usage across account limits. If every MxToolbox account fails or no key is saved, the app automatically falls back to free DNSBL checks.
+                  Blacklist checks use the enabled MxToolbox account assigned to the server user. If that user has no key, or that key is rate-limited, the app shows a warning and falls back to free DNSBL checks.
                 </div>
 
                 <button onClick={() => handleSave("ip")} disabled={savingIp} className="h-[34px] rounded-[7px] bg-[#4F46E5] hover:bg-[#4338CA] px-3.5 text-[13px] font-medium text-white transition-colors disabled:opacity-50">

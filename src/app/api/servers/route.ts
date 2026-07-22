@@ -47,7 +47,7 @@ function cleanIpAddressList(value: unknown) {
   );
 }
 
-async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null) {
+async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null, blacklistUserId?: string | null) {
   if (!addresses) return;
 
   const existing = await db
@@ -80,7 +80,7 @@ async function syncServerIpAddresses(serverId: string, providerId: string, addre
         status: "active",
       })
       .returning();
-    await enrichIpAddress(createdIp.id, true).catch(() => null);
+    await enrichIpAddress(createdIp.id, true, blacklistUserId).catch(() => null);
   }
 }
 
@@ -318,7 +318,7 @@ export async function POST(request: Request) {
     })
     .returning();
 
-  await syncServerIpAddresses(created.id, created.providerId, cleanedIpAddresses);
+  const inferredProviderUserId = finalAssignedUserIds[0] || sessionUserId(session);
 
   // Assign users
   if (finalAssignedUserIds.length > 0) {
@@ -327,7 +327,8 @@ export async function POST(request: Request) {
     }
   }
 
-  const inferredProviderUserId = finalAssignedUserIds[0] || sessionUserId(session);
+  await syncServerIpAddresses(created.id, created.providerId, cleanedIpAddresses, inferredProviderUserId);
+
   await db
     .update(providers)
     .set({ assignedUserId: inferredProviderUserId, updatedAt: new Date() })
