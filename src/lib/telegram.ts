@@ -94,28 +94,27 @@ async function telegramFetch(path: string, options?: RequestInit, tokenOverride?
   return response;
 }
 
-export async function sendTelegramMessage(chatId: string, text: string): Promise<{ messageId: number }> {
+export async function sendTelegramMessage(chatId: string, text: string, options?: { parseMode?: "Markdown" | "HTML" | null }): Promise<{ messageId: number }> {
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    text,
+  };
+  if (options?.parseMode !== null) {
+    body.parse_mode = options?.parseMode || "Markdown";
+  }
   const res = await telegramFetch("/sendMessage", {
     method: "POST",
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: text,
-      parse_mode: "Markdown",
-    }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   return { messageId: data.result?.message_id };
 }
 
-export async function sendTelegramAlert(text: string): Promise<boolean> {
+export async function sendTelegramAlert(text: string, options?: { parseMode?: "Markdown" | "HTML" | null }): Promise<boolean> {
   const chatId = await getTelegramAlertChatId();
-  if (!chatId) return false;
-  await sendTelegramMessage(chatId, text);
+  if (!chatId) throw new Error("Telegram alert chat ID is not configured");
+  await sendTelegramMessage(chatId, text, options);
   return true;
-}
-
-function escapeMarkdown(value: unknown): string {
-  return String(value ?? "-").replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
 export async function sendAuditTelegramAlert(input: {
@@ -125,7 +124,7 @@ export async function sendAuditTelegramAlert(input: {
   actorEmail?: string | null;
   entityName?: string | null;
   entityDetail?: string | null;
-}) {
+}, options?: { throwOnError?: boolean }) {
   try {
     const actionLabels = {
       login: "User Login",
@@ -138,18 +137,19 @@ export async function sendAuditTelegramAlert(input: {
       server: "Server",
       ip_address: "IP Address",
     };
-    const icon = input.action === "delete" ? "🗑️" : input.action === "login" ? "🔐" : "➕";
+    const prefix = input.action === "delete" ? "[Deleted]" : input.action === "login" ? "[User Login]" : "[Created]";
     const lines = [
-      `${icon} *${escapeMarkdown(actionLabels[input.action])}*`,
-      `Type: ${escapeMarkdown(entityLabels[input.entityType])}`,
-      input.entityName ? `Item: ${escapeMarkdown(input.entityName)}` : null,
-      input.entityDetail ? `Details: ${escapeMarkdown(input.entityDetail)}` : null,
-      input.actorName || input.actorEmail ? `By: ${escapeMarkdown(input.actorName || input.actorEmail)}${input.actorEmail ? ` \\(${escapeMarkdown(input.actorEmail)}\\)` : ""}` : null,
-      `Time: ${escapeMarkdown(new Date().toLocaleString("en-US", { timeZone: "UTC" }))} UTC`,
+      `${prefix} ${actionLabels[input.action]}`,
+      `Type: ${entityLabels[input.entityType]}`,
+      input.entityName ? `Item: ${input.entityName}` : null,
+      input.entityDetail ? `Details: ${input.entityDetail}` : null,
+      input.actorName || input.actorEmail ? `By: ${input.actorName || input.actorEmail}${input.actorEmail ? ` (${input.actorEmail})` : ""}` : null,
+      `Time: ${new Date().toLocaleString("en-US", { timeZone: "UTC" })} UTC`,
     ].filter(Boolean);
-    await sendTelegramAlert(lines.join("\n"));
+    await sendTelegramAlert(lines.join("\n"), { parseMode: null });
   } catch (error) {
-    console.warn("[telegram] audit alert failed", error);
+    console.error("[telegram] audit alert failed", error);
+    if (options?.throwOnError) throw error;
   }
 }
 

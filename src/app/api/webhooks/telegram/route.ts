@@ -32,7 +32,7 @@ export async function POST(request: Request) {
           actorEmail: session.user.email,
           entityName: "Telegram audit alert test",
           entityDetail: "Settings test",
-        });
+        }, { throwOnError: true });
         return NextResponse.json({ ok: true });
       }
 
