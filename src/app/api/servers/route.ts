@@ -80,7 +80,7 @@ async function syncServerIpAddresses(serverId: string, providerId: string, addre
         status: "active",
       })
       .returning();
-    await enrichIpAddress(createdIp.id).catch(() => null);
+    await enrichIpAddress(createdIp.id, true).catch(() => null);
   }
 }
 

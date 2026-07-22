@@ -625,28 +625,37 @@ function ServersPageContent() {
     }
   };
 
-  const runBlacklistCheck = async () => {
+  const showBlacklistWarnings = (warnings: Array<{ message?: string }>) => {
+    if (warnings.length === 0) return;
+    const mxtoolboxWarnings = warnings.filter((warning) =>
+      String(warning.message || "").toLowerCase().includes("mxtoolbox"),
+    );
+    const sample = mxtoolboxWarnings[0] || warnings[0];
+    toast.warning(mxtoolboxWarnings.length > 0 ? "MxToolbox API issue" : "Blacklist check warning", {
+      description: `${warnings.length} warning${warnings.length === 1 ? "" : "s"}. ${sample.message || "Review blacklist check settings."}`,
+      duration: 12000,
+    });
+  };
+
+  const runBlacklistCheck = async (serverIds = selected, successLabel = "Blacklist check complete") => {
+    const targetServerIds = Array.from(new Set(serverIds));
+    if (targetServerIds.length === 0) {
+      toast.error("Select at least one server to check blacklist status");
+      return;
+    }
+
     setCheckingBlacklist(true);
     try {
       const res = await fetch("/api/ip-intelligence/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true }),
+        body: JSON.stringify({ force: true, serverIds: targetServerIds }),
       });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      toast.success(`Blacklist check complete: ${result.checked ?? 0} IPs checked, ${result.listed ?? 0} listed`);
+      toast.success(`${successLabel}: ${result.checked ?? 0} IPs checked, ${result.listed ?? 0} listed`);
       const warnings = Array.isArray(result.blacklistWarnings) ? result.blacklistWarnings : [];
-      if (warnings.length > 0) {
-        const mxtoolboxWarnings = warnings.filter((warning: { message?: string }) =>
-          String(warning.message || "").toLowerCase().includes("mxtoolbox"),
-        );
-        const sample = mxtoolboxWarnings[0] || warnings[0];
-        toast.warning(mxtoolboxWarnings.length > 0 ? "MxToolbox API issue" : "Blacklist check warning", {
-          description: `${warnings.length} warning${warnings.length === 1 ? "" : "s"}. ${sample.message || "Review blacklist check settings."}`,
-          duration: 12000,
-        });
-      }
+      showBlacklistWarnings(warnings);
       fetchServers();
     } catch {
       toast.error("Failed to run blacklist check");
@@ -705,11 +714,16 @@ function ServersPageContent() {
         }),
       });
       if (!res.ok) throw new Error(editingServer ? "Failed to update server" : "Failed to create server");
+      const savedServer = await res.json();
       toast.success(editingServer ? "Server updated" : "Server created");
       setShowCreate(false);
       setEditingServer(null);
       resetForm();
-      fetchServers();
+      if (!editingServer && savedServer?.id) {
+        await runBlacklistCheck([savedServer.id], "New server blacklist check complete");
+      } else {
+        fetchServers();
+      }
     } catch {
       toast.error(editingServer ? "Failed to update server" : "Failed to create server");
     } finally {
@@ -812,12 +826,12 @@ function ServersPageContent() {
                 {detectingRegions ? "Detecting..." : "Detect regions"}
               </button>
               <button
-                onClick={runBlacklistCheck}
+                onClick={() => runBlacklistCheck()}
                 disabled={checkingBlacklist}
                 className="inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] px-3 text-[12px] font-semibold text-[#4F46E5] hover:bg-[#E0E7FF] disabled:opacity-60"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${checkingBlacklist ? "animate-spin" : ""}`} />
-                {checkingBlacklist ? "Checking..." : "Check blacklist"}
+                {checkingBlacklist ? "Checking..." : selected.length > 0 ? `Check selected (${selected.length})` : "Check selected"}
               </button>
             </>
           )}

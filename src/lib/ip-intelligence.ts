@@ -1,7 +1,7 @@
 import dns from "dns/promises";
 import { db } from "@/db";
-import { ipAddresses, servers, settings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { ipAddresses, servers, serverUsers, settings } from "@/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 export type IpGeo = {
   ip: string;
@@ -423,6 +423,62 @@ export async function runDailyIpIntelligence(force = false) {
 
   return {
     checked: allIps.length,
+    listed: results.filter((result) => result.blacklist.listed).length,
+    results,
+    errors,
+    blacklistWarnings,
+  };
+}
+
+export async function runIpIntelligenceForServers(serverIds: string[], force = true, userId?: string | null) {
+  const uniqueServerIds = Array.from(new Set(serverIds.map((id) => String(id).trim()).filter(Boolean)));
+  if (uniqueServerIds.length === 0) {
+    return {
+      checked: 0,
+      listed: 0,
+      results: [] as IpIntelligenceSnapshot[],
+      errors: [] as Array<{ ip: string; error: string }>,
+      blacklistWarnings: [] as Array<{ ip: string; source: string; message: string }>,
+    };
+  }
+
+  const conditions = [inArray(ipAddresses.serverId, uniqueServerIds)];
+  if (userId) {
+    conditions.push(sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${ipAddresses.serverId} and ${serverUsers.userId} = ${userId})`);
+  }
+
+  const targetIps = await db
+    .select({ id: ipAddresses.id, address: ipAddresses.address, serverId: ipAddresses.serverId })
+    .from(ipAddresses)
+    .where(and(...conditions));
+
+  const results: IpIntelligenceSnapshot[] = [];
+  const errors: Array<{ ip: string; error: string }> = [];
+
+  for (const ip of targetIps) {
+    try {
+      const snapshot = await enrichIpAddress(ip.id, force);
+      if (snapshot) results.push(snapshot);
+    } catch (err) {
+      errors.push({ ip: ip.address, error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }
+
+  const blacklistWarnings = results.flatMap((result) => {
+    const warnings: Array<{ ip: string; source: string; message: string }> = [];
+    if (result.blacklist.error) {
+      warnings.push({ ip: result.ip, source: result.blacklist.provider, message: result.blacklist.error });
+    }
+    for (const finding of result.blacklist.findings) {
+      if (finding.error) {
+        warnings.push({ ip: result.ip, source: finding.source, message: finding.error });
+      }
+    }
+    return warnings;
+  });
+
+  return {
+    checked: targetIps.length,
     listed: results.filter((result) => result.blacklist.listed).length,
     results,
     errors,
