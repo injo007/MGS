@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { servers, providers, auditLogs, ipAddresses, sendingLogs, serverUsers, users } from "@/db/schema";
 import { eq, ilike, desc, asc, and, count, sql, max, isNull } from "drizzle-orm";
-import { enrichIpAddress, getIpIntelligenceCache } from "@/lib/ip-intelligence";
+import { getIpIntelligenceCache, runIpIntelligenceForServers } from "@/lib/ip-intelligence";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
 import { sendAuditTelegramAlert } from "@/lib/telegram";
+import { createNotification } from "@/lib/notifications";
+
+export const maxDuration = 360;
 
 function cleanServerPayload(body: Record<string, unknown>): Partial<typeof servers.$inferInsert> {
   const nullableTextFields = [
@@ -47,7 +50,7 @@ function cleanIpAddressList(value: unknown) {
   );
 }
 
-async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null, blacklistUserIds?: string | string[] | null) {
+async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null) {
   if (!addresses) return;
 
   const existing = await db
@@ -70,7 +73,7 @@ async function syncServerIpAddresses(serverId: string, providerId: string, addre
   const existingAddresses = new Set(existing.map((ip) => ip.address));
   for (const address of addresses) {
     if (existingAddresses.has(address)) continue;
-    const [createdIp] = await db
+    await db
       .insert(ipAddresses)
       .values({
         address,
@@ -78,9 +81,62 @@ async function syncServerIpAddresses(serverId: string, providerId: string, addre
         providerId,
         serverId,
         status: "active",
-      })
-      .returning();
-    await enrichIpAddress(createdIp.id, true, blacklistUserIds).catch(() => null);
+      });
+  }
+}
+
+async function checkNewServerBlacklist({
+  serverId,
+  serverName,
+  creatorUserId,
+}: {
+  serverId: string;
+  serverName: string;
+  creatorUserId: string;
+}) {
+  try {
+    const result = await runIpIntelligenceForServers(
+      [serverId],
+      true,
+      undefined,
+      creatorUserId,
+      "hetrixtools",
+    );
+    const warnings = result.blacklistWarnings || [];
+    const errors = result.errors || [];
+
+    if (warnings.length > 0 || errors.length > 0) {
+      const detail = warnings[0]?.message || errors[0]?.error || "HetrixTools could not complete the blacklist check.";
+      await createNotification(
+        creatorUserId,
+        `Blacklist check issue: ${serverName}`,
+        `${detail} Review the server IP status; DNSBL fallback may have been used.`,
+        "blacklist_error",
+        "server",
+        serverId,
+      );
+      return;
+    }
+
+    await createNotification(
+      creatorUserId,
+      `Blacklist check complete: ${serverName}`,
+      result.listed > 0
+        ? `HetrixTools checked ${result.checked} IP${result.checked === 1 ? "" : "s"}; ${result.listed} IP${result.listed === 1 ? " is" : "s are"} listed. Open Servers to review the RBL tags.`
+        : `HetrixTools checked ${result.checked} IP${result.checked === 1 ? "" : "s"}. No blacklist listings were found.`,
+      result.listed > 0 ? "blacklist_alert" : "blacklist_complete",
+      "server",
+      serverId,
+    );
+  } catch (error) {
+    await createNotification(
+      creatorUserId,
+      `Blacklist check failed: ${serverName}`,
+      error instanceof Error ? error.message : "HetrixTools blacklist check failed.",
+      "blacklist_error",
+      "server",
+      serverId,
+    );
   }
 }
 
@@ -331,8 +387,15 @@ export async function POST(request: Request) {
     created.id,
     created.providerId,
     cleanedIpAddresses,
-    finalAssignedUserIds.length > 0 ? finalAssignedUserIds : inferredProviderUserId,
   );
+
+  if ((cleanedIpAddresses?.length || 0) > 0) {
+    after(() => checkNewServerBlacklist({
+      serverId: created.id,
+      serverName: created.name,
+      creatorUserId: sessionUserId(session),
+    }));
+  }
 
   await db
     .update(providers)

@@ -372,6 +372,15 @@ function ServersPageContent() {
       .catch(() => {});
   }, [admin, fetchServers]);
 
+  useEffect(() => {
+    const refreshBlacklistResult = (event: Event) => {
+      const notification = (event as CustomEvent<{ relatedEntityType?: string }>).detail;
+      if (notification?.relatedEntityType === "server") fetchServers();
+    };
+    window.addEventListener("cloudops:notification", refreshBlacklistResult);
+    return () => window.removeEventListener("cloudops:notification", refreshBlacklistResult);
+  }, [fetchServers]);
+
   const regions = useMemo(() => Array.from(new Set(servers.map((s) => detectedRegion(s)).filter(Boolean))) as string[], [servers]);
   const types = useMemo(() => Array.from(new Set(servers.map(serverType).filter(Boolean))), [servers]);
   const billingCycles = useMemo(() => Array.from(new Set(servers.map((s) => s.billingMethod).filter(Boolean))) as string[], [servers]);
@@ -722,16 +731,16 @@ function ServersPageContent() {
         }),
       });
       if (!res.ok) throw new Error(editingServer ? "Failed to update server" : "Failed to create server");
-      const savedServer = await res.json();
-      toast.success(editingServer ? "Server updated" : "Server created");
+      await res.json();
+      toast.success(editingServer ? "Server updated" : "Server created", {
+        description: !editingServer && parseIpAddresses(form.ipAddresses).length > 0
+          ? "HetrixTools is checking the new server IPs in the background. You will receive a notification when it finishes."
+          : undefined,
+      });
       setShowCreate(false);
       setEditingServer(null);
       resetForm();
-      if (!editingServer && savedServer?.id) {
-        await runBlacklistCheck([savedServer.id], "New server blacklist check complete");
-      } else {
-        fetchServers();
-      }
+      fetchServers();
     } catch {
       toast.error(editingServer ? "Failed to update server" : "Failed to create server");
     } finally {

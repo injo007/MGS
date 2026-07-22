@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "next-themes";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
@@ -35,6 +35,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Notification {
   id: string;
@@ -110,6 +111,8 @@ export function TopNav({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [urgentTasks, setUrgentTasks] = useState<UrgentTask[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const knownNotificationIds = useRef(new Set<string>());
+  const notificationsInitialized = useRef(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length + urgentTasks.length;
   const urgentTask = urgentTasks[0] || null;
@@ -119,7 +122,26 @@ export function TopNav({
       const res = await fetch("/api/notifications");
       if (res.ok) {
         const json = await res.json();
-        setNotifications(json.data ?? []);
+        const nextNotifications = (json.data ?? []) as Notification[];
+        if (notificationsInitialized.current) {
+          const newNotifications = nextNotifications.filter((notification) => !knownNotificationIds.current.has(notification.id));
+          for (const notification of newNotifications) {
+            knownNotificationIds.current.add(notification.id);
+            window.dispatchEvent(new CustomEvent("cloudops:notification", { detail: notification }));
+            const toastOptions = {
+              description: notification.message,
+              duration: 15000,
+              closeButton: true,
+            };
+            if (notification.type === "blacklist_error") toast.error(notification.title, toastOptions);
+            else if (notification.type === "blacklist_alert") toast.warning(notification.title, toastOptions);
+            else if (notification.type === "blacklist_complete") toast.success(notification.title, toastOptions);
+          }
+        } else {
+          for (const notification of nextNotifications) knownNotificationIds.current.add(notification.id);
+          notificationsInitialized.current = true;
+        }
+        setNotifications(nextNotifications);
         setUrgentTasks(json.urgentTasks ?? []);
       }
     } catch {
@@ -132,6 +154,8 @@ export function TopNav({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchNotifications();
+    const interval = window.setInterval(fetchNotifications, 15000);
+    return () => window.clearInterval(interval);
   }, [fetchNotifications]);
 
   const handleMarkAllRead = async () => {
