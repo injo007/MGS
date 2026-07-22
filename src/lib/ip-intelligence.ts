@@ -2,6 +2,7 @@ import dns from "dns/promises";
 import { db } from "@/db";
 import { ipAddresses, servers, serverUsers, settings } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { isMxToolboxApiKey } from "@/lib/mxtoolbox";
 
 export type IpGeo = {
   ip: string;
@@ -192,27 +193,51 @@ export async function lookupIpGeo(ip: string): Promise<IpGeo | null> {
   }
 }
 
-async function readMxToolboxResponse(res: Response) {
+async function readMxToolboxResponse(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return {};
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    return JSON.parse(text) as unknown;
   } catch {
     return { Message: text };
   }
 }
 
-function formatMxToolboxUsage(data: Record<string, unknown> | null) {
-  if (!data) return null;
-  const dnsRequests = data.DnsRequests ?? data.dnsRequests;
-  const dnsMax = data.DnsMax ?? data.dnsMax;
-  const networkRequests = data.NetworkRequests ?? data.networkRequests;
-  const networkMax = data.NetworkMax ?? data.networkMax;
+function asMxToolboxRecord(data: unknown): Record<string, unknown> {
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : {};
+}
+
+function mxToolboxErrorMessage(data: unknown, status: number): string {
+  if (typeof data === "string" && data.trim()) return data.trim();
+  if (Array.isArray(data)) {
+    const messages: string[] = data.map((item) => mxToolboxErrorMessage(item, status)).filter(Boolean);
+    if (messages.length > 0) return messages.join("; ");
+  }
+
+  const record = asMxToolboxRecord(data);
+  const detail = record.Message || record.message || record.Error || record.error || record.Description || record.description;
+  return detail ? String(detail) : `MxToolbox HTTP ${status}`;
+}
+
+function formatMxToolboxUsage(data: unknown) {
+  const record = asMxToolboxRecord(data);
+  if (Object.keys(record).length === 0) return null;
+  const dnsRequests = record.DnsRequests ?? record.dnsRequests;
+  const dnsMax = record.DnsMax ?? record.dnsMax;
+  const networkRequests = record.NetworkRequests ?? record.networkRequests;
+  const networkMax = record.NetworkMax ?? record.networkMax;
   const parts = [
     dnsRequests != null || dnsMax != null ? `DNS ${dnsRequests ?? "?"}/${dnsMax ?? "?"}` : null,
     networkRequests != null || networkMax != null ? `Network ${networkRequests ?? "?"}/${networkMax ?? "?"}` : null,
   ].filter(Boolean);
-  return parts.length > 0 ? `Usage: ${parts.join(", ")}` : null;
+  const quotaExplanation = Number(networkMax) === 0
+    ? "Blacklist requires Network quota, but this account has none"
+    : null;
+  return parts.length > 0
+    ? [`Usage: ${parts.join(", ")}`, quotaExplanation].filter(Boolean).join(" | ")
+    : null;
 }
 
 async function getMxToolboxUsage(apiKey: string) {
@@ -225,7 +250,7 @@ async function getMxToolboxUsage(apiKey: string) {
       cache: "no-store",
     });
     const data = await readMxToolboxResponse(res);
-    if (!res.ok) return `Usage API unavailable: ${data.Message || data.Error || `HTTP ${res.status}`}`;
+    if (!res.ok) return `Usage API unavailable: ${mxToolboxErrorMessage(data, res.status)}`;
     return formatMxToolboxUsage(data) || "Usage API returned no quota details";
   } catch (err) {
     return `Usage API unavailable: ${err instanceof Error ? err.message : "unknown error"}`;
@@ -233,7 +258,11 @@ async function getMxToolboxUsage(apiKey: string) {
 }
 
 async function checkMxtoolboxBlacklist(ip: string, apiKey: string) {
-  const res = await fetch(`https://api.mxtoolbox.com/api/v1/Lookup/blacklist/?argument=${encodeURIComponent(ip)}`, {
+  if (!isMxToolboxApiKey(apiKey)) {
+    throw new Error("Invalid API key format. MxToolbox requires a UUID API key; account emails and passwords are not API keys.");
+  }
+
+  const res = await fetch(`https://mxtoolbox.com/api/v1/lookup/blacklist/${encodeURIComponent(ip)}`, {
     headers: {
       Accept: "application/json",
       Authorization: apiKey,
@@ -242,14 +271,15 @@ async function checkMxtoolboxBlacklist(ip: string, apiKey: string) {
   });
   const data = await readMxToolboxResponse(res);
   if (!res.ok) {
-    const usage = res.status === 429 ? await getMxToolboxUsage(apiKey) : null;
-    const detail = data.Message || data.Error || data.error || `MxToolbox HTTP ${res.status}`;
+    const usage = await getMxToolboxUsage(apiKey);
+    const detail = mxToolboxErrorMessage(data, res.status);
     throw new Error([detail, usage].filter(Boolean).join(" | "));
   }
 
-  const failed = Array.isArray(data.Failed) ? data.Failed : [];
-  const warnings = Array.isArray(data.Warnings) ? data.Warnings : [];
-  const passed = Array.isArray(data.Passed) ? data.Passed : [];
+  const response = asMxToolboxRecord(data);
+  const failed = Array.isArray(response.Failed) ? response.Failed : [];
+  const warnings = Array.isArray(response.Warnings) ? response.Warnings : [];
+  const passed = Array.isArray(response.Passed) ? response.Passed : [];
   const listedFindings = failed.map((item: Record<string, unknown>) => ({
     source: "mxtoolbox",
     listed: true,

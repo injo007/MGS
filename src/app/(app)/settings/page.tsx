@@ -21,6 +21,7 @@ import {
   Plus,
   Upload,
 } from "lucide-react";
+import { isMxToolboxApiKey, MXTOOLBOX_API_KEY_HELP } from "@/lib/mxtoolbox";
 
 interface MxToolboxAccount {
   id: string;
@@ -195,6 +196,12 @@ export default function SettingsPage() {
   function buildMxToolboxDraft(): MxToolboxAccount | null {
     const apiKey = inputMxToolboxKey.trim();
     if (!apiKey) return null;
+    if (!isMxToolboxApiKey(apiKey)) {
+      toast.error("Invalid MxToolbox API key", {
+        description: MXTOOLBOX_API_KEY_HELP,
+      });
+      return null;
+    }
     if (mxToolboxAccounts.some((account) => account.apiKey === apiKey)) {
       toast.error("This MxToolbox API key is already in the account list");
       return null;
@@ -1060,6 +1067,11 @@ export default function SettingsPage() {
                           <div className="min-w-0">
                             <p className="truncate text-[13px] font-semibold text-[#111827]">{account.label}</p>
                             <p className="truncate text-[12px] text-[#6B7280]">{maskApiKey(account.apiKey)}</p>
+                            {!isMxToolboxApiKey(account.apiKey) && (
+                              <p className="mt-1 text-[11px] font-semibold text-[#DC2626]">
+                                Invalid key: replace this account with a UUID API key
+                              </p>
+                            )}
                           </div>
                           <select
                             value={account.assignedUserId || ""}
@@ -1114,7 +1126,7 @@ export default function SettingsPage() {
                     <input
                       type={showMxToolboxKey ? "text" : "password"}
                       className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 pr-9 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
-                      placeholder={settings.mxtoolbox_api_key ? maskApiKey(settings.mxtoolbox_api_key) : "Optional MxToolbox key"}
+                      placeholder="API key UUID: 00000000-0000-0000-0000-000000000000"
                       value={inputMxToolboxKey}
                       onChange={(e) => setInputMxToolboxKey(e.target.value)}
                     />
@@ -1126,6 +1138,9 @@ export default function SettingsPage() {
                       {showMxToolboxKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  <p className="text-[12px] leading-relaxed text-[#6B7280]">
+                    {MXTOOLBOX_API_KEY_HELP} Blacklist is a Network lookup; free MxToolbox plans currently have no Network lookup quota.
+                  </p>
                   <select
                     value={inputMxToolboxUserId}
                     onChange={(e) => setInputMxToolboxUserId(e.target.value)}
@@ -1151,7 +1166,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="rounded-[7px] bg-[#F9FAFB] border border-[#E5E7EB] p-3 text-[13px] text-[#6B7280] leading-relaxed">
-                  Blacklist checks use the enabled MxToolbox account assigned to the server user. If that user has no key, or that key is rate-limited, the app shows a warning and falls back to free DNSBL checks.
+                  Blacklist checks use the enabled MxToolbox API key assigned to the server user. When a key is invalid, its Network quota is unavailable, or MxToolbox rejects the lookup, the app reports the exact API and quota response and completes the check with DNSBL fallback.
                 </div>
 
                 <button onClick={() => handleSave("ip")} disabled={savingIp} className="h-[34px] rounded-[7px] bg-[#4F46E5] hover:bg-[#4338CA] px-3.5 text-[13px] font-medium text-white transition-colors disabled:opacity-50">
