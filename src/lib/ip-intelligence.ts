@@ -520,7 +520,7 @@ export async function runDailyIpIntelligence(force = false) {
   };
 }
 
-export async function runIpIntelligenceForServers(serverIds: string[], force = true, userId?: string | null) {
+export async function runIpIntelligenceForServers(serverIds: string[], force = true, userId?: string | null, fallbackUserId?: string | null) {
   const uniqueServerIds = Array.from(new Set(serverIds.map((id) => String(id).trim()).filter(Boolean)));
   if (uniqueServerIds.length === 0) {
     return {
@@ -559,7 +559,12 @@ export async function runIpIntelligenceForServers(serverIds: string[], force = t
 
   for (const ip of targetIps) {
     try {
-      const accountUserId = userId || assignedUsersByServer.get(ip.serverId) || null;
+      const serverUserIds = assignedUsersByServer.get(ip.serverId) || [];
+      const candidateUserIds = Array.from(new Set([
+        ...serverUserIds,
+        ...(fallbackUserId ? [fallbackUserId] : []),
+      ]));
+      const accountUserId = userId || (candidateUserIds.length > 0 ? candidateUserIds : null);
       const snapshot = await enrichIpAddress(ip.id, force, accountUserId);
       if (snapshot) results.push(snapshot);
     } catch (err) {

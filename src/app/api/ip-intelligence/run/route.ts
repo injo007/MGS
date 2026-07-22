@@ -17,7 +17,8 @@ export async function POST(request: Request) {
     const result = await runIpIntelligenceForServers(
       serverIds,
       body.force !== false,
-      isAdmin(session) ? null : sessionUserId(session),
+      isAdmin(session) ? undefined : sessionUserId(session),
+      isAdmin(session) ? sessionUserId(session) : undefined,
     );
     return NextResponse.json(result);
   }
