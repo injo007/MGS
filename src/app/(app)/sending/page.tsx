@@ -98,6 +98,7 @@ const BASE_TABS = [
 const WARMUP_TAB = { key: "warmup", label: "Warmup" };
 const USER_CHART_COLORS = ["#4F46E5", "#16A34A", "#EA580C", "#0891B2", "#8B5CF6", "#DC2626"];
 type AlertFilter = "all" | "bounce" | "ts04" | "capacity" | null;
+type StatsRangeKey = "week" | "currentMonth" | "lastMonth" | "custom";
 
 type DrawerTextKey =
   | "dailyLimit"
@@ -138,6 +139,35 @@ function dateKey(date: Date) {
   const copy = new Date(date);
   copy.setHours(12, 0, 0, 0);
   return copy.toISOString().slice(0, 10);
+}
+
+function dateFromKey(key: string) {
+  return new Date(`${key}T12:00:00.000Z`);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  next.setHours(12, 0, 0, 0);
+  return next;
+}
+
+function dayRange(startKey: string, endKey: string) {
+  const start = dateFromKey(startKey);
+  const end = dateFromKey(endKey);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+
+  const days: { key: string; label: string; dateLabel: string }[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    days.push({
+      key: dateKey(cursor),
+      label: cursor.toLocaleDateString("en-US", { weekday: "short" }),
+      dateLabel: cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
 }
 
 function weekStartKey(value: Date) {
@@ -227,16 +257,17 @@ export default function SendingPage() {
   const [drawerServerId, setDrawerServerId] = useState<string | null>(null);
   const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
   const [sentDrafts, setSentDrafts] = useState<Record<string, string>>({});
-  const [weeklyDrafts, setWeeklyDrafts] = useState<Record<string, string>>({});
   const [savingLimits, setSavingLimits] = useState<Record<string, boolean>>({});
   const [savingSentToday, setSavingSentToday] = useState<Record<string, boolean>>({});
   const [savingWeeklyStats, setSavingWeeklyStats] = useState<Record<string, boolean>>({});
-  const [savingRangeStats, setSavingRangeStats] = useState(false);
-  const [rangeForm, setRangeForm] = useState({
+  const [statsRange, setStatsRange] = useState<StatsRangeKey>("week");
+  const [statsCustomRange, setStatsCustomRange] = useState({
     startDate: "",
     endDate: "",
-    dailyVolume: "",
   });
+  const [statsLogs, setStatsLogs] = useState<SendingItem[]>([]);
+  const [loadingStatsLogs, setLoadingStatsLogs] = useState(false);
+  const [rangeDailyDrafts, setRangeDailyDrafts] = useState<Record<string, string>>({});
   const [warmupEnabled, setWarmupEnabled] = useState(false);
   const [autoThrottle, setAutoThrottle] = useState<Record<string, boolean>>({});
   const [drawerForm, setDrawerForm] = useState({
@@ -366,7 +397,36 @@ export default function SendingPage() {
     }
   }
   const drawerServer = enriched.find((server) => server.id === drawerServerId) ?? null;
-  const editableWeeklyServer = selectedServers.length === 1 ? selectedServers[0] : null;
+  const statsRangeWindow = useMemo(() => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    let start = addDays(today, -6);
+    let end = today;
+    let label = "This week";
+
+    if (statsRange === "currentMonth") {
+      start = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+      end = today;
+      label = today.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    } else if (statsRange === "lastMonth") {
+      start = new Date(today.getFullYear(), today.getMonth() - 1, 1, 12);
+      end = new Date(today.getFullYear(), today.getMonth(), 0, 12);
+      label = start.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    } else if (statsRange === "custom") {
+      start = statsCustomRange.startDate ? dateFromKey(statsCustomRange.startDate) : start;
+      end = statsCustomRange.endDate ? dateFromKey(statsCustomRange.endDate) : end;
+      label = statsCustomRange.startDate && statsCustomRange.endDate ? "Custom range" : "Choose custom dates";
+    }
+
+    const startKey = dateKey(start);
+    const endKey = dateKey(end);
+    return {
+      startKey,
+      endKey,
+      label,
+      days: dayRange(startKey, endKey),
+    };
+  }, [statsCustomRange.endDate, statsCustomRange.startDate, statsRange]);
 
   useEffect(() => {
     if (!drawerServer) return;
@@ -378,6 +438,49 @@ export default function SendingPage() {
       monitoring: autoThrottle[drawerServer.id] ?? true,
     }));
   }, [autoThrottle, drawerServer]);
+
+  useEffect(() => {
+    const serverIds = selectedServers.map((server) => server.id);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRangeDailyDrafts({});
+    if (serverIds.length === 0 || statsRangeWindow.days.length === 0) {
+      setStatsLogs([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingStatsLogs(true);
+    const params = new URLSearchParams({
+      pageSize: "5000",
+      sortBy: "date",
+      sortOrder: "asc",
+      serverIds: serverIds.join(","),
+      startDate: statsRangeWindow.startKey,
+      endDate: statsRangeWindow.endKey,
+    });
+
+    fetch(`/api/sending?${params.toString()}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      })
+      .then((json) => {
+        if (!cancelled) setStatsLogs(json.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStatsLogs([]);
+          toast.error("Failed to load selected server statistics");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingStatsLogs(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedServers, statsRangeWindow.days.length, statsRangeWindow.endKey, statsRangeWindow.startKey]);
 
   const totals = useMemo(() => {
     const actual = enriched.reduce((sum, server) => sum + Number(server.totalSends || 0), 0);
@@ -398,45 +501,34 @@ export default function SendingPage() {
   ];
 
   const weeklyStats = useMemo(() => {
-    const selectedServerIds = new Set(selectedServers.map((server) => server.id));
-    const days = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - index));
-      const key = dateKey(date);
-      return {
-        key,
-        label: date.toLocaleDateString("en-US", { weekday: "short" }),
-        dateLabel: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        sent: 0,
-        delivered: 0,
-        bounces: 0,
-        complaints: 0,
-        unsubscribes: 0,
-      };
-    });
-    const byDate = new Map(days.map((day) => [day.key, day]));
+    const serverIds = selectedServers.map((server) => server.id);
+    const rows = statsRangeWindow.days.map((day) => ({
+      ...day,
+      sent: 0,
+      delivered: 0,
+      bounces: 0,
+      complaints: 0,
+      unsubscribes: 0,
+      valuesByServer: Object.fromEntries(serverIds.map((serverId) => [serverId, 0])) as Record<string, number>,
+    }));
+    const byDate = new Map(rows.map((day) => [day.key, day]));
 
-    for (const server of selectedServers) {
-      for (const day of server.dailyHistory || []) {
-        const bucket = byDate.get(day.date);
-        if (!bucket) continue;
-        bucket.sent += Number(day.sends || 0);
-        bucket.delivered += Number(day.successful || 0);
-        bucket.bounces += Number(day.bounces || 0);
-      }
-    }
-
-    for (const log of logs) {
-      if (!log.serverId || !selectedServerIds.has(log.serverId)) continue;
+    for (const log of statsLogs) {
+      if (!log.serverId) continue;
       const key = dateKey(new Date(log.date));
       const bucket = byDate.get(key);
       if (!bucket) continue;
+      const actualSends = Number(log.actualSends || 0);
+      bucket.sent += actualSends;
+      bucket.delivered += Number(log.successfulSends || 0);
+      bucket.bounces += Number(log.bounces || 0);
       bucket.complaints += Number(log.complaints || 0);
       bucket.unsubscribes += Number(log.unsubscribes || 0);
+      bucket.valuesByServer[log.serverId] = (bucket.valuesByServer[log.serverId] || 0) + actualSends;
     }
 
-    return days;
-  }, [logs, selectedServers]);
+    return rows;
+  }, [selectedServers, statsLogs, statsRangeWindow.days]);
 
   const weeklyTotals = useMemo(() => {
     return weeklyStats.reduce(
@@ -573,63 +665,69 @@ export default function SendingPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       toast.success(options?.today ? "Today volume saved" : "Daily volume saved");
-      setWeeklyDrafts((state) => {
-        const next = { ...state };
-        delete next[savingKey];
-        return next;
-      });
       fetchData();
     } catch {
       toast.error(options?.today ? "Failed to save today volume" : "Failed to save daily volume");
       if (options?.today) setSentDrafts((state) => ({ ...state, [server.id]: current }));
-      else setWeeklyDrafts((state) => ({ ...state, [savingKey]: current }));
     } finally {
       if (options?.today) setSavingSentToday((state) => ({ ...state, [server.id]: false }));
       else setSavingWeeklyStats((state) => ({ ...state, [savingKey]: false }));
     }
   };
 
-  const applyRangeStatistics = async () => {
+  const saveRangeDayVolume = async (dayKey: string, value: string, currentLabel: string) => {
     const serverIds = selectedServers.map((server) => server.id);
-    const actualSends = Number(rangeForm.dailyVolume);
+    const actualSends = Number(value);
     if (serverIds.length === 0) {
       toast.error("Select at least one server first");
       return;
     }
-    if (!rangeForm.startDate || !rangeForm.endDate || !Number.isFinite(actualSends) || actualSends < 0) {
-      toast.error("Start date, end date, and daily volume are required");
+    if (!Number.isFinite(actualSends) || actualSends < 0) {
+      toast.error("Daily volume must be a positive number");
       return;
     }
-    if (new Date(rangeForm.startDate) > new Date(rangeForm.endDate)) {
-      toast.error("Start date must be before end date");
-      return;
-    }
-    const days = Math.floor((new Date(rangeForm.endDate).getTime() - new Date(rangeForm.startDate).getTime()) / 86400000) + 1;
-    if (!window.confirm(`Set ${formatNumber(actualSends)} sent per day for ${serverIds.length} selected server${serverIds.length === 1 ? "" : "s"} across ${days} day${days === 1 ? "" : "s"}? Existing records for those days will be overwritten and duplicate same-day records will be collapsed.`)) return;
+    if (serverIds.length > 1 && !window.confirm(`Set ${formatNumber(actualSends)} sent on ${currentLabel} for each of the ${serverIds.length} selected servers? Existing records for that day will be overwritten.`)) return;
 
-    setSavingRangeStats(true);
+    setSavingWeeklyStats((state) => ({ ...state, [`range:${dayKey}`]: true }));
     try {
       const res = await fetch("/api/sending/daily", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           serverIds,
-          startDate: rangeForm.startDate,
-          endDate: rangeForm.endDate,
+          date: dayKey,
           actualSends,
         }),
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok && res.status !== 207) throw new Error(result.error || "Failed to apply range statistics");
+      if (!res.ok && res.status !== 207) throw new Error(result.error || "Failed to save daily statistics");
       const failures = Number(result.failed || 0);
-      toast.success(`Range statistics saved for ${result.updated || 0} day record${result.updated === 1 ? "" : "s"}`, {
+      toast.success(`Daily statistics saved for ${result.updated || 0} server${result.updated === 1 ? "" : "s"}`, {
         description: failures ? `${failures} records could not be saved. Check selected servers have IPs.` : result.removedDuplicates ? `${result.removedDuplicates} duplicate record${result.removedDuplicates === 1 ? "" : "s"} collapsed.` : undefined,
       });
+      setRangeDailyDrafts((state) => {
+        const next = { ...state };
+        delete next[dayKey];
+        return next;
+      });
       fetchData();
+      const params = new URLSearchParams({
+        pageSize: "5000",
+        sortBy: "date",
+        sortOrder: "asc",
+        serverIds: serverIds.join(","),
+        startDate: statsRangeWindow.startKey,
+        endDate: statsRangeWindow.endKey,
+      });
+      const refreshed = await fetch(`/api/sending?${params.toString()}`);
+      if (refreshed.ok) {
+        const json = await refreshed.json();
+        setStatsLogs(json.data ?? []);
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to apply range statistics");
+      toast.error(err instanceof Error ? err.message : "Failed to save daily statistics");
     } finally {
-      setSavingRangeStats(false);
+      setSavingWeeklyStats((state) => ({ ...state, [`range:${dayKey}`]: false }));
     }
   };
 
@@ -826,32 +924,6 @@ export default function SendingPage() {
               {selected.length > 0 && <button onClick={() => setSelected([])} className="ml-auto text-[12px] font-medium text-[#4F46E5]">Clear selection</button>}
             </div>
 
-            {selectedServers.length > 0 && (
-              <div className="grid gap-3 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3 lg:grid-cols-[1fr_auto] lg:items-end">
-                <div>
-                  <p className="text-[13px] font-bold text-[#111827]">Set Historical Statistics Range</p>
-                  <p className="mt-0.5 text-[12px] text-[#6B7280]">Apply one daily sent volume across a custom date range for the selected server{selectedServers.length === 1 ? "" : "s"}.</p>
-                </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                    Start
-                    <input type="date" value={rangeForm.startDate} onChange={(event) => setRangeForm((current) => ({ ...current, startDate: event.target.value }))} className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]" />
-                  </label>
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                    End
-                    <input type="date" value={rangeForm.endDate} onChange={(event) => setRangeForm((current) => ({ ...current, endDate: event.target.value }))} className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]" />
-                  </label>
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                    Sent / day
-                    <input type="number" min="0" value={rangeForm.dailyVolume} onChange={(event) => setRangeForm((current) => ({ ...current, dailyVolume: event.target.value }))} className="mt-1 block h-[32px] w-[110px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]" />
-                  </label>
-                  <button onClick={applyRangeStatistics} disabled={savingRangeStats} className="h-[32px] rounded-[7px] bg-[#4F46E5] px-3 text-[12px] font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60">
-                    {savingRangeStats ? "Saving..." : "Apply Range"}
-                  </button>
-                </div>
-              </div>
-            )}
-
             {alertFilter && (
               <div className="flex items-center justify-between border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2">
                 <p className="text-[12px] font-semibold text-[#374151]">
@@ -986,16 +1058,53 @@ export default function SendingPage() {
                             <div className="rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] px-4 py-3">
                                 <div>
-                                  <h2 className="text-[15px] font-bold text-[#111827]">Weekly Server Statistics</h2>
+                                  <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
                                   <p className="mt-0.5 text-[12px] text-[#6B7280]">
                                     {selectedServers.length === 1
-                                      ? `Last 7 days for ${selectedServers[0].name}`
-                                      : `Last 7 days across ${selectedServers.length} selected servers`}
+                                      ? `${statsRangeWindow.label} for ${selectedServers[0].name}`
+                                      : `${statsRangeWindow.label} across ${selectedServers.length} selected servers`}
                                   </p>
-                                  {selectedServers.length > 1 && (
-                                    <p className="mt-1 text-[11px] font-medium text-[#EA580C]">Select one server to edit previous daily volumes.</p>
+                                  <p className="mt-1 text-[11px] font-medium text-[#6B7280]">Daily edits are applied to the selected server{selectedServers.length === 1 ? "" : "s"} only.</p>
+                                </div>
+                                <div className="flex flex-wrap items-end gap-2">
+                                  <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                                    Range
+                                    <select
+                                      value={statsRange}
+                                      onChange={(event) => setStatsRange(event.target.value as StatsRangeKey)}
+                                      className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] normal-case tracking-normal text-[#111827]"
+                                    >
+                                      <option value="week">This week</option>
+                                      <option value="currentMonth">Current month</option>
+                                      <option value="lastMonth">Last month</option>
+                                      <option value="custom">Custom</option>
+                                    </select>
+                                  </label>
+                                  {statsRange === "custom" && (
+                                    <>
+                                      <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                                        Start
+                                        <input
+                                          type="date"
+                                          value={statsCustomRange.startDate}
+                                          onChange={(event) => setStatsCustomRange((current) => ({ ...current, startDate: event.target.value }))}
+                                          className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] normal-case tracking-normal text-[#111827]"
+                                        />
+                                      </label>
+                                      <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                                        End
+                                        <input
+                                          type="date"
+                                          value={statsCustomRange.endDate}
+                                          onChange={(event) => setStatsCustomRange((current) => ({ ...current, endDate: event.target.value }))}
+                                          className="mt-1 block h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] normal-case tracking-normal text-[#111827]"
+                                        />
+                                      </label>
+                                    </>
                                   )}
                                 </div>
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
                                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[12px] sm:grid-cols-4">
                                   <div>
                                     <p className="font-semibold text-[#6B7280]">Volume</p>
@@ -1014,6 +1123,7 @@ export default function SendingPage() {
                                     <p className="mt-0.5 text-[18px] font-bold text-[#DC2626]">{pct(weeklyTotals.complaints, weeklyTotals.sent, 2)}%</p>
                                   </div>
                                 </div>
+                                {loadingStatsLogs && <span className="text-[12px] font-semibold text-[#4F46E5]">Loading statistics...</span>}
                               </div>
                               <div className="grid grid-cols-1 gap-0 xl:grid-cols-[1fr_360px]">
                                 <div className="min-h-[190px] border-b border-[#E5E7EB] p-4 xl:border-b-0 xl:border-r">
@@ -1042,7 +1152,7 @@ export default function SendingPage() {
                                   <table className="w-full min-w-[360px]">
                                     <thead>
                                       <tr className="border-b border-[#E5E7EB]">
-                                        {["Day", "Volume", "Rate", "Issues"].map((header) => (
+                                        {["Day", "Sent / server", "Total", "Rate", "Issues"].map((header) => (
                                           <th key={header} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.03em] text-[#6B7280]">{header}</th>
                                         ))}
                                       </tr>
@@ -1050,9 +1160,12 @@ export default function SendingPage() {
                                     <tbody>
                                       {weeklyStats.map((day) => {
                                         const issueCount = day.bounces + day.complaints + day.unsubscribes;
-                                        const draftKey = editableWeeklyServer ? `${editableWeeklyServer.id}:${day.key}` : "";
-                                        const draftValue = draftKey ? weeklyDrafts[draftKey] ?? String(day.sent) : String(day.sent);
-                                        const changed = Boolean(editableWeeklyServer && draftValue !== String(day.sent));
+                                        const serverValues = selectedServers.map((server) => day.valuesByServer[server.id] ?? 0);
+                                        const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
+                                        const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
+                                        const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
+                                        const changed = draftValue.trim() !== "" && (!allSame || draftValue !== baseValue);
+                                        const savingKey = `range:${day.key}`;
                                         return (
                                           <tr key={day.key} className="border-b border-[#F1F5F9] last:border-0">
                                             <td className="px-3 py-2">
@@ -1060,36 +1173,39 @@ export default function SendingPage() {
                                               <p className="text-[10px] text-[#6B7280]">{day.dateLabel}</p>
                                             </td>
                                             <td className="px-3 py-2">
-                                              {editableWeeklyServer ? (
-                                                <div className="flex items-center gap-1">
-                                                  <input
-                                                    value={draftValue}
-                                                    onChange={(event) => setWeeklyDrafts((state) => ({ ...state, [draftKey]: event.target.value }))}
-                                                    onBlur={(event) => saveDailyVolume(editableWeeklyServer, day.key, event.target.value, day.sent)}
-                                                    onKeyDown={(event) => {
-                                                      if (event.key === "Enter") event.currentTarget.blur();
-                                                      if (event.key === "Escape") {
-                                                        setWeeklyDrafts((state) => ({ ...state, [draftKey]: String(day.sent) }));
-                                                        event.currentTarget.blur();
-                                                      }
-                                                    }}
-                                                    disabled={savingWeeklyStats[draftKey]}
-                                                    className="h-[28px] w-[82px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
-                                                  />
-                                                  {changed && (
-                                                    <button
-                                                      onMouseDown={(event) => event.preventDefault()}
-                                                      onClick={() => saveDailyVolume(editableWeeklyServer, day.key, draftValue, day.sent)}
-                                                      disabled={savingWeeklyStats[draftKey]}
-                                                      className="rounded-[6px] bg-[#4F46E5] px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-60"
-                                                    >
-                                                      {savingWeeklyStats[draftKey] ? "..." : "Save"}
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              ) : (
-                                                <span className="text-[12px] font-semibold text-[#111827]">{formatNumber(day.sent)}</span>
-                                              )}
+                                              <div className="flex items-center gap-1">
+                                                <input
+                                                  value={draftValue}
+                                                  placeholder={allSame ? "0" : "Mixed"}
+                                                  onChange={(event) => setRangeDailyDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === "Enter" && changed) saveRangeDayVolume(day.key, draftValue, day.dateLabel);
+                                                    if (event.key === "Escape") {
+                                                      setRangeDailyDrafts((state) => {
+                                                        const next = { ...state };
+                                                        delete next[day.key];
+                                                        return next;
+                                                      });
+                                                      event.currentTarget.blur();
+                                                    }
+                                                  }}
+                                                  disabled={savingWeeklyStats[savingKey]}
+                                                  className="h-[28px] w-[82px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
+                                                />
+                                                {changed && (
+                                                  <button
+                                                    onMouseDown={(event) => event.preventDefault()}
+                                                    onClick={() => saveRangeDayVolume(day.key, draftValue, day.dateLabel)}
+                                                    disabled={savingWeeklyStats[savingKey]}
+                                                    className="rounded-[6px] bg-[#4F46E5] px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-60"
+                                                  >
+                                                    {savingWeeklyStats[savingKey] ? "..." : "Save"}
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td className="px-3 py-2 text-[12px] font-semibold text-[#111827]">
+                                              {formatNumber(day.sent)}
                                             </td>
                                             <td className="px-3 py-2 text-[12px] font-semibold text-[#15803D]">{pct(day.delivered, day.sent, 1)}%</td>
                                             <td className="px-3 py-2">

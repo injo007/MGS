@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { sendingLogs, providers, servers, users, auditLogs, serverUsers } from "@/db/schema";
-import { eq, desc, asc, and, count, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, asc, and, count, gte, inArray, lte, sql } from "drizzle-orm";
 import { canAccessServer, forbidden, isAdmin, sessionUserId } from "@/lib/access-control";
 
 export async function GET(request: Request) {
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   const sortOrder = searchParams.get("sortOrder") || "desc";
   const providerId = searchParams.get("providerId");
   const serverId = searchParams.get("serverId");
+  const serverIdsParam = searchParams.get("serverIds");
   const mailerId = searchParams.get("mailerId");
   const campaignId = searchParams.get("campaignId");
   const startDate = searchParams.get("startDate");
@@ -31,10 +32,14 @@ export async function GET(request: Request) {
 
   if (providerId) conditions.push(eq(sendingLogs.providerId, providerId));
   if (serverId) conditions.push(eq(sendingLogs.serverId, serverId));
+  if (serverIdsParam) {
+    const serverIds = serverIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
+    if (serverIds.length > 0) conditions.push(inArray(sendingLogs.serverId, serverIds));
+  }
   if (mailerId) conditions.push(eq(sendingLogs.mailerId, mailerId));
   if (campaignId) conditions.push(eq(sendingLogs.campaignId, campaignId));
-  if (startDate) conditions.push(gte(sendingLogs.date, new Date(startDate)));
-  if (endDate) conditions.push(lte(sendingLogs.date, new Date(endDate)));
+  if (startDate) conditions.push(gte(sendingLogs.date, new Date(`${startDate.slice(0, 10)}T00:00:00.000Z`)));
+  if (endDate) conditions.push(lte(sendingLogs.date, new Date(`${endDate.slice(0, 10)}T23:59:59.999Z`)));
   if (!admin) {
     conditions.push(sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${sendingLogs.serverId} and ${serverUsers.userId} = ${currentUserId})`);
   }
