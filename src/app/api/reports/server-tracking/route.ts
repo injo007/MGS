@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, sendingLogs, servers } from "@/db/schema";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
-import { canAccessServer, forbidden } from "@/lib/access-control";
+import { providers, sendingLogs, servers, serverUsers } from "@/db/schema";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { canAccessServer, forbidden, isAdmin, sessionUserId } from "@/lib/access-control";
 
 function parseDate(value: string | null, fallback: Date, endOfDay = false) {
   if (!value) return fallback;
@@ -18,10 +18,10 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const serverId = searchParams.get("serverId");
-  if (!serverId) {
-    return NextResponse.json({ error: "serverId is required" }, { status: 400 });
-  }
+  const serverId = searchParams.get("serverId") || "all";
+  const requestedUserId = searchParams.get("userId") || "";
+  const admin = isAdmin(session);
+  const scopedUserId = admin ? requestedUserId || null : sessionUserId(session);
 
   const now = new Date();
   const defaultStart = new Date();
@@ -29,7 +29,17 @@ export async function GET(request: Request) {
   const start = parseDate(searchParams.get("start"), defaultStart);
   const end = parseDate(searchParams.get("end"), now, true);
 
-  const [server] = await db
+  const serverScopeCondition = scopedUserId
+    ? sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${servers.id} and ${serverUsers.userId} = ${scopedUserId})`
+    : undefined;
+  const specificServer = serverId !== "all";
+  const serverConditions = [
+    ...(specificServer ? [eq(servers.id, serverId)] : []),
+    ...(serverScopeCondition ? [serverScopeCondition] : []),
+  ];
+  const serverWhere = serverConditions.length > 0 ? and(...serverConditions) : undefined;
+
+  const serverRows = await db
     .select({
       id: servers.id,
       name: servers.name,
@@ -38,15 +48,28 @@ export async function GET(request: Request) {
     })
     .from(servers)
     .leftJoin(providers, eq(servers.providerId, providers.id))
-    .where(eq(servers.id, serverId))
-    .limit(1);
+    .where(serverWhere);
 
-  if (!server) {
+  if (serverRows.length === 0) {
     return NextResponse.json({ error: "Server not found" }, { status: 404 });
   }
-  if (!(await canAccessServer(session, serverId))) {
+  if (specificServer && !(await canAccessServer(session, serverId))) {
     return forbidden("Reports only include servers assigned to you.");
   }
+
+  const server = specificServer
+    ? serverRows[0]
+    : {
+        id: "all",
+        name: scopedUserId ? "Assigned servers" : "All servers",
+        status: "all",
+        providerName: `${serverRows.length} server${serverRows.length === 1 ? "" : "s"}`,
+      };
+
+  const serverIds = serverRows.map((row) => row.id);
+  const sendingScopeCondition = specificServer
+    ? eq(sendingLogs.serverId, serverId)
+    : inArray(sendingLogs.serverId, serverIds);
 
   const daily = await db
     .select({
@@ -59,7 +82,7 @@ export async function GET(request: Request) {
       unsubscribes: sql<number>`coalesce(sum(${sendingLogs.unsubscribes}), 0)`,
     })
     .from(sendingLogs)
-    .where(and(eq(sendingLogs.serverId, serverId), gte(sendingLogs.date, start), lte(sendingLogs.date, end)))
+    .where(and(sendingScopeCondition, gte(sendingLogs.date, start), lte(sendingLogs.date, end)))
     .groupBy(sql`to_char(${sendingLogs.date}, 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(${sendingLogs.date}, 'YYYY-MM-DD')`);
 

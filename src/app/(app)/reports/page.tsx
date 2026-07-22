@@ -188,7 +188,7 @@ export default function ReportsPage() {
       .then((json) => {
         const rows = json.data ?? [];
         setServers(rows);
-        setTrackingServerId(rows[0]?.id || "");
+        setTrackingServerId("all");
         setTrackingReport(null);
       })
       .catch(() => setServers([]));
@@ -206,21 +206,21 @@ export default function ReportsPage() {
   }, [isAdmin]);
 
   const fetchTrackingReport = useCallback(async () => {
-    if (!trackingServerId) return;
     setTrackingLoading(true);
     try {
       const params = new URLSearchParams({
-        serverId: trackingServerId,
+        serverId: trackingServerId || "all",
         start: trackingStart,
         end: trackingEnd,
       });
+      if (isAdmin && selectedUserId !== "all") params.set("userId", selectedUserId);
       const res = await fetch(`/api/reports/server-tracking?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch tracking report");
       setTrackingReport(await res.json());
     } finally {
       setTrackingLoading(false);
     }
-  }, [trackingEnd, trackingServerId, trackingStart]);
+  }, [isAdmin, selectedUserId, trackingEnd, trackingServerId, trackingStart]);
 
   const providerFunnel = useMemo(() => {
     if (!stats) return [];
@@ -307,6 +307,9 @@ export default function ReportsPage() {
               }}
               className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] font-medium text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15"
             >
+              <option value="all">
+                {isAdmin && selectedUserId === "all" ? "All existing servers" : "All assigned servers"}
+              </option>
               {servers.length === 0 ? (
                 <option value="">No servers found</option>
               ) : (
@@ -344,7 +347,7 @@ export default function ReportsPage() {
           </label>
           <button
             onClick={fetchTrackingReport}
-            disabled={!trackingServerId || trackingLoading}
+            disabled={servers.length === 0 || trackingLoading}
             className="inline-flex h-[36px] items-center gap-2 rounded-[7px] bg-[#4F46E5] px-4 text-[13px] font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${trackingLoading ? "animate-spin" : ""}`} />
