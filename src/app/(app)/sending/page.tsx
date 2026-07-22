@@ -28,6 +28,8 @@ import {
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Pie,
@@ -72,6 +74,8 @@ interface ServerRow {
 interface SendingItem {
   id: string;
   date: string;
+  mailerId: string | null;
+  mailerName?: string | null;
   serverId: string | null;
   serverName: string | null;
   providerName: string | null;
@@ -92,6 +96,7 @@ const BASE_TABS = [
   { key: "paused", label: "Paused" },
 ];
 const WARMUP_TAB = { key: "warmup", label: "Warmup" };
+const USER_CHART_COLORS = ["#4F46E5", "#16A34A", "#EA580C", "#0891B2", "#8B5CF6", "#DC2626"];
 type AlertFilter = "all" | "bounce" | "ts04" | "capacity" | null;
 
 type DrawerTextKey =
@@ -133,6 +138,15 @@ function dateKey(date: Date) {
   const copy = new Date(date);
   copy.setHours(12, 0, 0, 0);
   return copy.toISOString().slice(0, 10);
+}
+
+function weekStartKey(value: Date) {
+  const date = new Date(value);
+  const dayOfWeek = date.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  date.setDate(date.getDate() + mondayOffset);
+  date.setHours(12, 0, 0, 0);
+  return date.toISOString().slice(0, 10);
 }
 
 function warmupStage(server: ServerRow) {
@@ -446,6 +460,47 @@ export default function SendingPage() {
       })),
     [weeklyStats]
   );
+
+  const currentMonthUserChart = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const weeks: Record<string, string | number>[] = [];
+    const cursor = new Date(monthStart);
+    const seenWeeks = new Set<string>();
+
+    while (cursor <= monthEnd) {
+      const key = weekStartKey(cursor);
+      if (!seenWeeks.has(key)) {
+        seenWeeks.add(key);
+        weeks.push({
+          key,
+          week: new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const byWeek = new Map(weeks.map((week) => [String(week.key), week]));
+    const users = new Map<string, string>();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+
+    for (const log of logs) {
+      const date = new Date(log.date);
+      if (date.getMonth() !== month || date.getFullYear() !== year) continue;
+      const userName = log.mailerName || "Unassigned";
+      users.set(userName, userName);
+      const bucket = byWeek.get(weekStartKey(date));
+      if (bucket) bucket[userName] = Number(bucket[userName] || 0) + Number(log.actualSends || 0);
+    }
+
+    return {
+      weeks,
+      users: Array.from(users.keys()).slice(0, 6),
+      label: now.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    };
+  }, [logs]);
 
   const tabCount = (key: string) => {
     if (key === "all") return enriched.length;
@@ -1072,6 +1127,40 @@ export default function SendingPage() {
         </div>
 
         <aside className="space-y-4">
+          <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-[13px] font-bold text-[#111827]">Sending By User</h3>
+              <span className="rounded-[6px] border border-[#E5E7EB] px-2 py-1 text-[11px] text-[#6B7280]">{currentMonthUserChart.label}</span>
+            </div>
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={currentMonthUserChart.weeks} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} width={35} />
+                <Tooltip contentStyle={{ fontSize: "12px", borderRadius: "8px", border: "1px solid #E5E7EB" }} />
+                {currentMonthUserChart.users.map((user, index) => (
+                  <Bar
+                    key={user}
+                    dataKey={user}
+                    stackId="users"
+                    fill={USER_CHART_COLORS[index % USER_CHART_COLORS.length]}
+                    radius={index === currentMonthUserChart.users.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {currentMonthUserChart.users.length === 0 ? (
+                <span className="text-[11px] text-[#6B7280]">No sending stats for this month</span>
+              ) : currentMonthUserChart.users.map((user, index) => (
+                <span key={user} className="inline-flex items-center gap-1 text-[11px] text-[#6B7280]">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: USER_CHART_COLORS[index % USER_CHART_COLORS.length] }} />
+                  {user}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-[13px] font-bold text-[#111827]">Error Breakdown</h3>
