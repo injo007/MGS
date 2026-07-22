@@ -15,6 +15,7 @@ import {
 } from "@/db/schema";
 import { and, eq, count, sql, isNotNull, desc, gte, max, or, isNull } from "drizzle-orm";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
+import { getCachedImapInbox, getImapConfigs } from "@/lib/imap-service";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -25,6 +26,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const sixWeeksAgo = new Date();
   sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
+  const currentWeekStart = new Date();
+  const weekDay = currentWeekStart.getDay();
+  currentWeekStart.setDate(currentWeekStart.getDate() + (weekDay === 0 ? -6 : 1 - weekDay));
+  currentWeekStart.setHours(0, 0, 0, 0);
   const admin = isAdmin(session);
   const currentUserId = sessionUserId(session);
   const requestedUserId = searchParams.get("userId") || "";
@@ -79,6 +84,10 @@ export async function GET(request: Request) {
     sendingOverTime,
     userSendingOverTime,
     serverUtilization,
+    allUsers,
+    currentWeekSendingByUser,
+    imapAccounts,
+    cachedInbox,
   ] = await Promise.all([
     db.select({ total: count() }).from(providers).where(providerUserCondition),
 
@@ -209,7 +218,82 @@ export async function GET(request: Request) {
       .where(assignedServerCondition)
       .groupBy(servers.id, servers.name, servers.providerId, servers.status)
       .orderBy(sql`coalesce(sum(${sendingLogs.actualSends}), 0) desc`),
+
+    db.select({ id: users.id, name: users.name, email: users.email }).from(users),
+
+    db
+      .select({
+        userId: sendingLogs.mailerId,
+        userName: users.name,
+        userEmail: users.email,
+        totalSends: sql<number>`coalesce(sum(${sendingLogs.actualSends}), 0)`,
+        serverCount: sql<number>`count(distinct ${sendingLogs.serverId})::int`,
+        daysActive: sql<number>`count(distinct to_char(${sendingLogs.date}, 'YYYY-MM-DD'))::int`,
+      })
+      .from(sendingLogs)
+      .leftJoin(users, eq(sendingLogs.mailerId, users.id))
+      .where(assignedSendingCondition ? and(gte(sendingLogs.date, currentWeekStart), assignedSendingCondition) : gte(sendingLogs.date, currentWeekStart))
+      .groupBy(sendingLogs.mailerId, users.name, users.email)
+      .orderBy(sql`coalesce(sum(${sendingLogs.actualSends}), 0) desc`)
+      .limit(8),
+
+    getImapConfigs(undefined, true),
+
+    getCachedImapInbox(),
   ]);
+
+  const usersById = new Map(allUsers.map((user) => [user.id, user]));
+  const userIdByEmail = new Map(allUsers.map((user) => [user.email.toLowerCase(), user.id]));
+  const mailboxOwnerBySource = new Map<string, string>();
+  for (const account of imapAccounts) {
+    const source = account.user.toLowerCase();
+    const ownerId = account.assignedUserId || userIdByEmail.get(source) || "";
+    if (ownerId) mailboxOwnerBySource.set(source, ownerId);
+  }
+
+  const providerContactsByUser = new Map<string, {
+    providerIds: Set<string>;
+    emailCount: number;
+    mailboxes: Set<string>;
+    lastContactAt: string | null;
+  }>();
+
+  for (const email of cachedInbox?.emails || []) {
+    if (email.direction !== "outgoing" || !email.matchedProviderId) continue;
+    const ownerId = mailboxOwnerBySource.get((email.sourceEmail || "").toLowerCase());
+    if (!ownerId || (scopedUserId && ownerId !== scopedUserId)) continue;
+    if (!providerContactsByUser.has(ownerId)) {
+      providerContactsByUser.set(ownerId, {
+        providerIds: new Set(),
+        emailCount: 0,
+        mailboxes: new Set(),
+        lastContactAt: null,
+      });
+    }
+    const row = providerContactsByUser.get(ownerId)!;
+    row.providerIds.add(email.matchedProviderId);
+    row.emailCount += 1;
+    if (email.sourceEmail) row.mailboxes.add(email.sourceEmail);
+    if (!row.lastContactAt || new Date(email.date).getTime() > new Date(row.lastContactAt).getTime()) {
+      row.lastContactAt = email.date;
+    }
+  }
+
+  const providerContactLeaderboard = Array.from(providerContactsByUser.entries())
+    .map(([userId, value]) => {
+      const profile = usersById.get(userId);
+      return {
+        userId,
+        userName: profile?.name || "Unassigned",
+        userEmail: profile?.email || "",
+        providerCount: value.providerIds.size,
+        emailCount: value.emailCount,
+        mailboxCount: value.mailboxes.size,
+        lastContactAt: value.lastContactAt,
+      };
+    })
+    .sort((a, b) => b.providerCount - a.providerCount || b.emailCount - a.emailCount)
+    .slice(0, 8);
 
   const stats = {
     providers: {
@@ -284,6 +368,19 @@ export async function GET(request: Request) {
       lastSendDate: r.lastSendDate?.toISOString() || null,
       totalSends: Number(r.totalSends),
     })),
+    userRankings: {
+      weekStart: currentWeekStart.toISOString(),
+      lastInboxSync: cachedInbox?.timestamp || null,
+      providerContacts: providerContactLeaderboard,
+      weeklySending: currentWeekSendingByUser.map((r) => ({
+        userId: r.userId,
+        userName: r.userName || "Unassigned",
+        userEmail: r.userEmail || "",
+        totalSends: Number(r.totalSends),
+        serverCount: Number(r.serverCount),
+        daysActive: Number(r.daysActive),
+      })),
+    },
   };
 
   return NextResponse.json(stats);

@@ -21,6 +21,9 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Mail,
+  Send,
+  Trophy,
 } from "lucide-react";
 import {
   BarChart,
@@ -82,6 +85,27 @@ interface DashboardStats {
     lastSendDate: string | null;
     totalSends: number;
   }[];
+  userRankings: {
+    weekStart: string;
+    lastInboxSync: string | null;
+    providerContacts: {
+      userId: string;
+      userName: string;
+      userEmail: string;
+      providerCount: number;
+      emailCount: number;
+      mailboxCount: number;
+      lastContactAt: string | null;
+    }[];
+    weeklySending: {
+      userId: string;
+      userName: string;
+      userEmail: string;
+      totalSends: number;
+      serverCount: number;
+      daysActive: number;
+    }[];
+  };
 }
 
 interface ProviderRow {
@@ -121,15 +145,6 @@ const ALL_STATUS_CATEGORIES = [
   { key: "contacted", label: "Contacted", color: "#4F46E5" },
   { key: "follow_up_due", label: "Awaiting Reply", color: "#60A5FA" },
   { key: "replied", label: "Replied", color: "#8B5CF6" },
-  { key: "ready_to_contact", label: "Negotiating", color: "#F59E0B" },
-  { key: "accepted", label: "Accepted", color: "#22C55E" },
-  { key: "denied", label: "Denied", color: "#EF4444" },
-];
-
-const PIPELINE_STAGES = [
-  { key: "not_contacted", label: "Not Contacted", color: "#94A3B8" },
-  { key: "contacted", label: "Contacted", color: "#4F46E5" },
-  { key: "follow_up_due", label: "Awaiting Reply", color: "#60A5FA" },
   { key: "ready_to_contact", label: "Negotiating", color: "#F59E0B" },
   { key: "accepted", label: "Accepted", color: "#22C55E" },
   { key: "denied", label: "Denied", color: "#EF4444" },
@@ -259,10 +274,22 @@ function providerNote(provider: ProviderRow) {
   return provider.abusePolicyNotes || provider.sendingRestrictions || "-";
 }
 
+function compactNumber(value: number) {
+  return new Intl.NumberFormat("en-US", { notation: value >= 10000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "U";
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [actionProviders, setActionProviders] = useState<ProviderRow[]>([]);
-  const [allProviders, setAllProviders] = useState<ProviderRow[]>([]);
   const [dashboardServers, setDashboardServers] = useState<DashboardServerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -286,7 +313,6 @@ export default function DashboardPage() {
 
         const providerRows = providersData.data ?? [];
         setStats(statsData);
-        setAllProviders(providerRows);
         setDashboardServers(serversData.data ?? []);
         const actionRows = providerRows.filter(providerNeedsAction);
         setActionProviders((actionRows.length > 0 ? actionRows : providerRows).slice(0, 7));
@@ -328,9 +354,11 @@ export default function DashboardPage() {
     fill: cat.color,
   }));
 
-  const totalProviders = stats?.providers.total ?? 1;
-
   const userSendingChart = useMemo(() => userSendingWeeks(stats?.userSendingOverTime ?? []), [stats?.userSendingOverTime]);
+  const providerContactLeaders = stats?.userRankings?.providerContacts ?? [];
+  const weeklySendingLeaders = stats?.userRankings?.weeklySending ?? [];
+  const maxProviderContacts = Math.max(1, ...providerContactLeaders.map((user) => user.providerCount));
+  const maxWeeklySends = Math.max(1, ...weeklySendingLeaders.map((user) => user.totalSends));
 
   const chartTooltipStyle = {
     borderRadius: "8px",
@@ -700,75 +728,123 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Pipeline Overview */}
+        {/* User Performance Rankings */}
         <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[15px] font-semibold text-[#111827]">Pipeline Overview</h3>
-            <span className="text-[13px] text-[#6B7280]">
-              Total: <span className="font-semibold text-[#111827]">{stats?.providers.total ?? 0}</span>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-[#4F46E5]" />
+                <h3 className="text-[15px] font-semibold text-[#111827]">User Performance Rankings</h3>
+              </div>
+              <p className="mt-1 text-[12px] text-[#6B7280]">
+                Provider contacts from cached inbox conversations and sends from this week.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-[999px] border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-[#475569]">
+              Week of {stats?.userRankings?.weekStart ? new Date(stats.userRankings.weekStart).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "now"}
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            {PIPELINE_STAGES.map((stage) => {
-              const count = stage.key === "accepted"
-                ? (stats?.providers.byDecision.accepted ?? 0)
-                : stage.key === "denied"
-                ? (stats?.providers.byDecision.denied ?? 0)
-                : (stats?.providers.byContactStatus[stage.key] ?? 0);
-              const pct = totalProviders > 0 ? ((count / totalProviders) * 100).toFixed(1) : "0.0";
-              const providerNames = allProviders
-                .filter((p) => {
-                  if (stage.key === "accepted") return p.decision === "accepted";
-                  if (stage.key === "denied") return p.decision === "denied";
-                  return p.contactStatus === stage.key;
-                })
-                .slice(0, 3)
-                .map((p) => p.name);
-              const remaining = count - providerNames.length;
 
-              return (
-                <div
-                  key={stage.key}
-                  className="bg-white rounded-[8px] border border-[#E5E7EB] p-3 flex flex-col min-w-0"
-                >
-                  <div
-                    className="h-[3px] rounded-full mb-2"
-                    style={{ background: stage.color }}
-                  />
-                  <p className="text-[12px] font-semibold text-[#374151] mb-2 truncate">
-                    {stage.label}
-                  </p>
-                  {loading ? (
-                    <div className="h-5 w-8 bg-gray-100 rounded animate-pulse mb-1" />
-                  ) : (
-                    <p className="text-[20px] font-bold text-[#111827] leading-none">
-                      {count}
-                    </p>
-                  )}
-                  <p className="text-[11px] text-[#6B7280] mt-1">{pct}%</p>
-                  <div className="mt-3 space-y-1.5">
-                    {providerNames.length === 0 && !loading ? (
-                      <p className="text-[12px] text-[#9CA3AF] italic">No providers</p>
-                    ) : (
-                      providerNames.map((name) => (
-                        <p
-                          key={name}
-                          className="text-[12px] text-[#374151] leading-tight truncate"
-                          title={name}
-                        >
-                          {name}
-                        </p>
-                      ))
-                    )}
-                    {remaining > 0 && (
-                      <p className="text-[11px] text-[#9CA3AF]">
-                        ...and {remaining} more
-                      </p>
-                    )}
-                  </div>
+          <div className="grid gap-4 2xl:grid-cols-2">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-[#0891B2]" />
+                  <p className="text-[13px] font-semibold text-[#111827]">Provider Contacts</p>
                 </div>
-              );
-            })}
+                <Link href="/email-inbox" className="text-[12px] font-medium text-[#4F46E5] hover:underline">
+                  Inbox
+                </Link>
+              </div>
+              <div className="space-y-2">
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="h-[62px] rounded-[8px] border border-[#E5E7EB] bg-white p-3">
+                      <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
+                      <div className="mt-3 h-2 w-full animate-pulse rounded bg-gray-100" />
+                    </div>
+                  ))
+                ) : providerContactLeaders.length === 0 ? (
+                  <div className="rounded-[8px] border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-3 py-6 text-center">
+                    <p className="text-[13px] font-medium text-[#475569]">No sent provider conversations found</p>
+                    <p className="mt-1 text-[12px] text-[#94A3B8]">Sync sent mailboxes to build this ranking.</p>
+                  </div>
+                ) : providerContactLeaders.slice(0, 5).map((user, index) => (
+                  <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECFEFF] text-[10px] font-bold text-[#0891B2]">
+                        {index + 1}
+                      </span>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[11px] font-bold text-[#4F46E5]">
+                        {initials(user.userName)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-[13px] font-semibold text-[#111827]">{user.userName}</p>
+                          <p className="shrink-0 text-[13px] font-bold text-[#111827]">{user.providerCount}</p>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E5E7EB]">
+                          <div className="h-full rounded-full bg-[#0891B2]" style={{ width: `${Math.max(6, (user.providerCount / maxProviderContacts) * 100)}%` }} />
+                        </div>
+                        <p className="mt-1 text-[11px] text-[#6B7280]">
+                          {compactNumber(user.emailCount)} sent emails · {user.mailboxCount} mailbox{user.mailboxCount === 1 ? "" : "es"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Send className="h-4 w-4 text-[#16A34A]" />
+                  <p className="text-[13px] font-semibold text-[#111827]">Weekly Sending</p>
+                </div>
+                <Link href="/reports" className="text-[12px] font-medium text-[#4F46E5] hover:underline">
+                  Reports
+                </Link>
+              </div>
+              <div className="space-y-2">
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="h-[62px] rounded-[8px] border border-[#E5E7EB] bg-white p-3">
+                      <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
+                      <div className="mt-3 h-2 w-full animate-pulse rounded bg-gray-100" />
+                    </div>
+                  ))
+                ) : weeklySendingLeaders.length === 0 ? (
+                  <div className="rounded-[8px] border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-3 py-6 text-center">
+                    <p className="text-[13px] font-medium text-[#475569]">No sending numbers for this week</p>
+                    <p className="mt-1 text-[12px] text-[#94A3B8]">Add server statistics to populate the ranking.</p>
+                  </div>
+                ) : weeklySendingLeaders.slice(0, 5).map((user, index) => (
+                  <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECFDF5] text-[10px] font-bold text-[#15803D]">
+                        {index + 1}
+                      </span>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F0FDF4] text-[11px] font-bold text-[#15803D]">
+                        {initials(user.userName)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-[13px] font-semibold text-[#111827]">{user.userName}</p>
+                          <p className="shrink-0 text-[13px] font-bold text-[#111827]">{compactNumber(user.totalSends)}</p>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E5E7EB]">
+                          <div className="h-full rounded-full bg-[#16A34A]" style={{ width: `${Math.max(6, (user.totalSends / maxWeeklySends) * 100)}%` }} />
+                        </div>
+                        <p className="mt-1 text-[11px] text-[#6B7280]">
+                          {user.serverCount} server{user.serverCount === 1 ? "" : "s"} · {user.daysActive} active day{user.daysActive === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
