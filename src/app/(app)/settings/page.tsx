@@ -379,7 +379,10 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: webhookBaseUrl }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
       toast.success("Webhook set successfully", {
         description: "Telegram webhook has been configured.",
       });
@@ -404,7 +407,10 @@ export default function SettingsPage() {
           text: "Test message from CloudOps CRM",
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
       toast.success("Test message sent", {
         description: "Check your Telegram for the test message.",
       });

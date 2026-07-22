@@ -11,10 +11,6 @@ export async function POST(request: Request) {
     const secretToken = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
     const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
 
-    if (expectedSecret && secretToken !== expectedSecret) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const rawUpdate = await request.json();
 
     if (rawUpdate?.action === "send_test" || rawUpdate?.url) {
@@ -30,6 +26,10 @@ export async function POST(request: Request) {
 
       await setTelegramWebhook(String(rawUpdate.url), expectedSecret);
       return NextResponse.json({ ok: true });
+    }
+
+    if (expectedSecret && secretToken !== expectedSecret) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const parsed = parseTelegramUpdate(rawUpdate);
