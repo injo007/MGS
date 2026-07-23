@@ -64,6 +64,12 @@ interface Provider {
     email: string;
     source: "provider" | "contact" | "server" | "creator";
   }>;
+  contactedUsers: Array<{
+    id: string;
+    name: string;
+    email: string;
+    source: "inbox" | "outreach" | "fallback";
+  }>;
   lastContactDate: string | null;
   totalServers: number;
   activeServers: number;
@@ -124,6 +130,12 @@ function assignedUserChipClass(source: Provider["assignedUsers"][number]["source
   if (source === "contact") return "bg-[#ECFEFF] text-[#0891B2]";
   if (source === "server") return "bg-[#ECFDF5] text-[#15803D]";
   return "bg-[#EEF2FF] text-[#4F46E5]";
+}
+
+function contactedUserChipClass(source: Provider["contactedUsers"][number]["source"]) {
+  if (source === "inbox") return "bg-[#ECFEFF] text-[#0891B2]";
+  if (source === "outreach") return "bg-[#EEF2FF] text-[#4F46E5]";
+  return "bg-[#F3F4F6] text-[#4B5563]";
 }
 
 export default function ProvidersPage() {
@@ -406,7 +418,7 @@ export default function ProvidersPage() {
                   Note
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
-                  Limits
+                  Contacted By
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Servers
@@ -418,7 +430,7 @@ export default function ProvidersPage() {
                   Billing
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
-                  Assigned / Contacted
+                  Assigned / Usage
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Last / Next
@@ -542,8 +554,29 @@ export default function ProvidersPage() {
                       </p>
                     </td>
                     <td className="px-3 py-2.5">
-                      <p className="text-[12px] font-semibold text-[#111827]">Daily {provider.dailyLimit ? formatNumber(provider.dailyLimit) : "—"}</p>
-                      <p className="text-[11px] text-[#6B7280]">Hourly {provider.hourlyLimit ? formatNumber(provider.hourlyLimit) : "—"}</p>
+                      {provider.contactedUsers?.length ? (
+                        <div className="flex max-w-[170px] flex-wrap gap-1">
+                          {provider.contactedUsers.slice(0, 3).map((user) => (
+                            <span
+                              key={user.id}
+                              title={`${user.name} · ${user.source === "inbox" ? "synced inbox" : user.source === "outreach" ? "email outreach log" : "contacted status fallback"}`}
+                              className={`inline-flex items-center gap-1 rounded-[999px] px-2 py-0.5 text-[11px] font-semibold ${contactedUserChipClass(user.source)}`}
+                            >
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[8px]">
+                                {user.name.charAt(0)}
+                              </span>
+                              <span className="max-w-[92px] truncate">{user.name}</span>
+                            </span>
+                          ))}
+                          {provider.contactedUsers.length > 3 && (
+                            <span className="inline-flex rounded-[999px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7280]">
+                              +{provider.contactedUsers.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-[#9CA3AF]">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <Link

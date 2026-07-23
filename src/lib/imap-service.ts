@@ -3,7 +3,7 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { db } from "@/db";
-import { providers, providerContacts, providerResponses, outreachLogs, settings } from "@/db/schema";
+import { providers, providerContacts, providerResponses, outreachLogs, settings, users } from "@/db/schema";
 import { and, or, ilike, eq } from "drizzle-orm";
 import { Readable } from "stream";
 import { inferResponseType, providerUpdateForResponse } from "@/lib/provider-response-classifier";
@@ -544,6 +544,18 @@ export async function syncImapInbox(userId: string, includeAll = true, sourceEma
   };
 
   try {
+    const [configs, appUsers] = await Promise.all([
+      getImapConfigs(userId, includeAll),
+      db.select({ id: users.id, email: users.email }).from(users),
+    ]);
+    const userIdByEmail = new Map(appUsers.map((user) => [user.email.toLowerCase(), user.id]));
+    const mailboxOwnerBySource = new Map<string, string>();
+    for (const config of configs) {
+      const source = config.user.toLowerCase();
+      const ownerId = config.assignedUserId || userIdByEmail.get(source) || userId;
+      mailboxOwnerBySource.set(source, ownerId);
+    }
+
     const emails = await fetchImapConversations(500, userId, includeAll, sourceEmails);
     result.emails = emails;
     result.processed = emails.length;
@@ -551,7 +563,8 @@ export async function syncImapInbox(userId: string, includeAll = true, sourceEma
     for (const email of emails) {
       try {
         result.matched++;
-        await applyEmailToProvider(email, userId, false);
+        const contactOwnerId = mailboxOwnerBySource.get((email.sourceEmail || "").toLowerCase()) || userId;
+        await applyEmailToProvider(email, contactOwnerId, false);
       } catch (err) {
         result.errors.push(err instanceof Error ? err.message : `Failed to apply email UID ${email.uid}`);
       }

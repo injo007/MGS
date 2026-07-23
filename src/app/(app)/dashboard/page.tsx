@@ -297,7 +297,7 @@ export default function DashboardPage() {
         const [statsRes, providersRes, serversRes] = await Promise.all([
           fetch("/api/dashboard/stats"),
           fetch("/api/providers?pageSize=100&sortBy=lastContactDate&sortOrder=asc"),
-          fetch("/api/servers?pageSize=5&sortBy=createdAt&sortOrder=desc"),
+          fetch("/api/servers?pageSize=200&sortBy=createdAt&sortOrder=desc"),
         ]);
 
         if (!statsRes.ok) throw new Error("Failed to load dashboard stats");
@@ -359,7 +359,35 @@ export default function DashboardPage() {
   const totalRankedProviders = providerContactLeaders.reduce((sum, user) => sum + user.providerCount, 0);
   const totalRankedSends = weeklySendingLeaders.reduce((sum, user) => sum + user.totalSends, 0);
   const displayedDashboardServers = dashboardServers.slice(0, 3);
-  const remainingDashboardServers = Math.max(0, dashboardServers.length - displayedDashboardServers.length);
+  const totalDashboardServers = stats?.servers.total ?? dashboardServers.length;
+  const remainingDashboardServers = Math.max(0, totalDashboardServers - displayedDashboardServers.length);
+  const serverStatusColors: Record<string, string> = {
+    active: "#22C55E",
+    pending: "#F59E0B",
+    paused: "#8B5CF6",
+    cancelled: "#EF4444",
+    canceled: "#EF4444",
+    archived: "#64748B",
+    expired: "#EF4444",
+    unknown: "#94A3B8",
+  };
+  const serverStatusBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const server of dashboardServers) {
+      const status = server.status || "unknown";
+      counts.set(status, (counts.get(status) || 0) + 1);
+    }
+    const preferred = ["active", "pending", "paused", "cancelled", "archived", "expired", "unknown"];
+    return Array.from(counts.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => {
+        const aIndex = preferred.indexOf(a.status);
+        const bIndex = preferred.indexOf(b.status);
+        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+        return b.count - a.count;
+      });
+  }, [dashboardServers]);
+  const maxServerStatusCount = Math.max(1, ...serverStatusBreakdown.map((item) => item.count));
 
   const chartTooltipStyle = {
     borderRadius: "8px",
@@ -740,53 +768,85 @@ export default function DashboardPage() {
               View All Servers
             </Link>
           </div>
-          <div className="border-t border-[#E5E7EB]">
+          <div className="border-t border-[#E5E7EB] px-5 py-4">
             {loading ? (
-              <div className="space-y-0">
+              <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="border-b border-[#F1F5F9] px-5 py-3">
-                    <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
-                    <div className="mt-2 h-3 w-44 animate-pulse rounded bg-gray-100" />
+                  <div key={index}>
+                    <div className="flex items-center justify-between">
+                      <div className="h-3.5 w-24 animate-pulse rounded bg-gray-100" />
+                      <div className="h-3.5 w-8 animate-pulse rounded bg-gray-100" />
+                    </div>
+                    <div className="mt-2 h-2 w-full animate-pulse rounded-full bg-gray-100" />
                   </div>
                 ))}
               </div>
             ) : dashboardServers.length === 0 ? (
-              <div className="flex h-[160px] items-center justify-center px-5 text-center text-[13px] text-[#6B7280]">
+              <div className="flex h-[160px] items-center justify-center text-center text-[13px] text-[#6B7280]">
                 No servers available yet.
               </div>
             ) : (
-              <div className="divide-y divide-[#F1F5F9]">
-                {displayedDashboardServers.map((server) => (
-                  <div key={server.id} className="px-5 py-3 hover:bg-[#F8FAFC]">
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Link href="/servers" className="truncate text-[13px] font-bold text-[#2563EB] hover:underline">
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Total</p>
+                    <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{totalDashboardServers}</p>
+                  </div>
+                  <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Active</p>
+                    <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{stats?.servers.active ?? 0}</p>
+                  </div>
+                  <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Other</p>
+                    <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{Math.max(0, totalDashboardServers - (stats?.servers.active ?? 0))}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {serverStatusBreakdown.map((item) => {
+                    const label = item.status.replace(/_/g, " ");
+                    const color = serverStatusColors[item.status] || "#4F46E5";
+                    const width = `${Math.max(8, (item.count / maxServerStatusCount) * 100)}%`;
+                    return (
+                      <div key={item.status}>
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                            <span className="truncate text-[12px] font-semibold capitalize text-[#374151]">{label}</span>
+                          </div>
+                          <span className="text-[12px] font-bold text-[#111827]">{item.count}</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
+                          <div className="h-full rounded-full" style={{ width, backgroundColor: color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-[8px] border border-[#E5E7EB]">
+                  <div className="flex items-center justify-between border-b border-[#F1F5F9] px-3 py-2">
+                    <p className="text-[12px] font-semibold text-[#111827]">Latest Servers</p>
+                    {remainingDashboardServers > 0 && (
+                      <span className="text-[11px] font-medium text-[#6B7280]">+{remainingDashboardServers} more</span>
+                    )}
+                  </div>
+                  <div className="divide-y divide-[#F1F5F9]">
+                    {displayedDashboardServers.slice(0, 2).map((server) => (
+                      <div key={server.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <Link href="/servers" className="block truncate text-[12px] font-bold text-[#2563EB] hover:underline">
                             {server.name}
                           </Link>
-                          <span className="shrink-0 text-[11px] text-[#CBD5E1]">/</span>
-                          <span className="truncate text-[12px] font-medium text-[#374151]">{server.providerName ?? "No provider"}</span>
+                          <p className="mt-0.5 truncate text-[11px] text-[#6B7280]">
+                            {server.providerName ?? "No provider"} · {money(server.monthlyCost, server.currency ?? "USD")}
+                          </p>
                         </div>
-                        <p className="mt-1 truncate text-[11px] text-[#6B7280]">{server.location ?? "No region"}</p>
+                        <StatusBadge value={server.status} />
                       </div>
-                      <StatusBadge value={server.status} />
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280]">
-                      <span><span className="font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</span> monthly</span>
-                      <span><span className="font-semibold text-[#111827]">{server.ipCount ?? 0}</span> IPs</span>
-                      <span className="min-w-0 truncate"><span className="font-semibold text-[#111827]">Assigned:</span> {server.assignedUsers?.[0]?.name ?? "-"}</span>
-                    </div>
+                    ))}
                   </div>
-                ))}
-                {remainingDashboardServers > 0 && (
-                  <Link
-                    href="/servers"
-                    className="flex items-center justify-between px-5 py-3 text-[12px] font-semibold text-[#4F46E5] hover:bg-[#F8FAFC]"
-                  >
-                    <span>{remainingDashboardServers} more server{remainingDashboardServers === 1 ? "" : "s"}</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                )}
+                </div>
               </div>
             )}
           </div>

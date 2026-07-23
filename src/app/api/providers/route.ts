@@ -134,6 +134,7 @@ function cleanFormNote(value: unknown) {
 }
 
 type ProviderUserSource = "provider" | "contact" | "server" | "creator";
+type ProviderContactSource = "inbox" | "outreach" | "fallback";
 
 const providerUserSourcePriority: Record<ProviderUserSource, number> = {
   provider: 4,
@@ -242,6 +243,7 @@ export async function GET(request: Request) {
   const total = totalResult[0]?.total || 0;
   const providerIds = data.map((provider) => provider.id);
   const usageUsersByProvider = new Map<string, Map<string, { id: string; name: string; email: string; source: ProviderUserSource }>>();
+  const contactedUsersByProvider = new Map<string, Map<string, { id: string; name: string; email: string; source: ProviderContactSource }>>();
 
   const addUsageUser = (
     providerId: string,
@@ -254,6 +256,15 @@ export async function GET(request: Request) {
     if (!current || providerUserSourcePriority[user.source] > providerUserSourcePriority[current.source]) {
       existing.set(user.id, { id: user.id, name: user.name, email: user.email, source: user.source });
     }
+  };
+
+  const addContactedUser = (
+    providerId: string,
+    user: { id: string | null; name: string | null; email: string | null; source: ProviderContactSource }
+  ) => {
+    if (!user.id || !user.name || !user.email) return;
+    if (!contactedUsersByProvider.has(providerId)) contactedUsersByProvider.set(providerId, new Map());
+    contactedUsersByProvider.get(providerId)!.set(user.id, { id: user.id, name: user.name, email: user.email, source: user.source });
   };
 
   for (const provider of data) {
@@ -322,12 +333,13 @@ export async function GET(request: Request) {
       if (!owner) continue;
       contactedProvidersWithEvidence.add(email.matchedProviderId);
       addUsageUser(email.matchedProviderId, { id: owner.id, name: owner.name, email: owner.email, source: "contact" });
+      addContactedUser(email.matchedProviderId, { id: owner.id, name: owner.name, email: owner.email, source: "inbox" });
     }
 
     for (const row of outreachContacts) {
-      if (contactedProvidersWithEvidence.has(row.providerId)) continue;
       contactedProvidersWithEvidence.add(row.providerId);
       addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "contact" });
+      addContactedUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "outreach" });
     }
 
     const marouane = appUsers.find((user) => user.email.toLowerCase() === "marouane@cloudops.com")
@@ -336,6 +348,7 @@ export async function GET(request: Request) {
       for (const provider of data) {
         if (provider.contactStatus === "contacted" && !contactedProvidersWithEvidence.has(provider.id)) {
           addUsageUser(provider.id, { id: marouane.id, name: marouane.name, email: marouane.email, source: "contact" });
+          addContactedUser(provider.id, { id: marouane.id, name: marouane.name, email: marouane.email, source: "fallback" });
         }
       }
     }
@@ -351,9 +364,11 @@ export async function GET(request: Request) {
   // Normalize numeric aggregate values returned by PostgreSQL.
   const enriched = data.map((p) => {
     const assignedUsers = Array.from(usageUsersByProvider.get(p.id)?.values() || []);
+    const contactedUsers = Array.from(contactedUsersByProvider.get(p.id)?.values() || []);
     return {
       ...p,
       assignedUsers,
+      contactedUsers,
       assignedUserName: p.assignedUserName || assignedUsers[0]?.name || null,
       totalServers: Number(p.totalServers || 0),
       activeServers: Number(p.activeServers || 0),
