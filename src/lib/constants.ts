@@ -49,6 +49,7 @@ export const SERVER_STATUSES = [
   { value: "down", label: "Down" },
   { value: "port_closed", label: "Port Closed" },
   { value: "ts04_error", label: "TSS04" },
+  { value: "tss09_error", label: "TSS09" },
   { value: "bounce", label: "Bounce" },
   { value: "complaint", label: "Complaint" },
 ] as const;

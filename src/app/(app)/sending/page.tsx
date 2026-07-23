@@ -190,7 +190,7 @@ function warmupStage(server: ServerRow) {
 
 function sendingStatus(server: ServerRow, bounceRate: number, ts04Rate: number) {
   if (["paused", "cancelled", "expired"].includes(server.status)) return "paused";
-  if (["suspended", "down", "port_closed", "ts04_error", "bounce", "complaint"].includes(server.status)) return "restricted";
+  if (["suspended", "down", "port_closed", "ts04_error", "tss09_error", "bounce", "complaint"].includes(server.status)) return "restricted";
   if (bounceRate > 3 || ts04Rate > 1) return "restricted";
   if (warmupStage(server).startsWith("Stage")) return "warmup";
   return "active";

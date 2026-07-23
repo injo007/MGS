@@ -134,6 +134,7 @@ function serverRowTone(status: string, selected: boolean) {
     case "port_closed":
       return "border-l-4 border-l-[#F97316] bg-white shadow-[inset_8px_0_14px_-16px_rgba(249,115,22,0.5)] hover:bg-[#F8FAFC]";
     case "ts04_error":
+    case "tss09_error":
     case "bounce":
     case "complaint":
       return "border-l-4 border-l-[#F43F5E] bg-white shadow-[inset_8px_0_14px_-16px_rgba(244,63,94,0.5)] hover:bg-[#F8FAFC]";
@@ -892,7 +893,7 @@ function ServersPageContent() {
             className="inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] px-3 text-[12px] font-semibold text-[#4F46E5] hover:bg-[#E0E7FF] disabled:opacity-60"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${checkingBlacklist ? "animate-spin" : ""}`} />
-            {checkingBlacklist ? "Checking..." : selected.length > 0 ? `Check selected (${selected.length})` : "Check selected"}
+            {checkingBlacklist ? "Checking..." : selected.length > 0 ? `Check blacklist (${selected.length})` : "Check blacklist"}
           </button>
           <button className="flex h-[34px] w-[34px] items-center justify-center rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] text-[#4F46E5]">
             <List className="h-4 w-4" />
@@ -928,6 +929,7 @@ function ServersPageContent() {
             <option value="paused">Pause</option>
             <option value="suspended">Suspend</option>
             <option value="ts04_error">Mark TSS04</option>
+            <option value="tss09_error">Mark TSS09</option>
             <option value="bounce">Mark Bounce</option>
           </select>
           <button

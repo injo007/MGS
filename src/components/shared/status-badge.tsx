@@ -51,6 +51,7 @@ export const STATUS_CONFIG: Record<string, { variant: StatusVariant; label: stri
   down: { variant: "danger", label: "Down" },
   port_closed: { variant: "danger", label: "Port Closed" },
   ts04_error: { variant: "danger", label: "TSS04" },
+  tss09_error: { variant: "danger", label: "TSS09" },
   bounce: { variant: "danger", label: "Bounce" },
   complaint: { variant: "danger", label: "Complaint" },
 };
