@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { ProviderLogo } from "@/components/shared/provider-logo";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   AlertTriangle,
@@ -56,6 +57,7 @@ interface ServerRow {
   name: string;
   providerId: string;
   providerName: string | null;
+  providerWebsite: string | null;
   plan: string | null;
   location: string | null;
   status: string;
@@ -958,7 +960,12 @@ export default function SendingPage() {
                       </button>
                       <button onClick={() => setDrawerServerId(server.id)} className="min-w-0 flex-1 text-left">
                         <p className="truncate text-[14px] font-bold text-[#2563EB]">{server.name}</p>
-                        <p className="mt-0.5 truncate text-[12px] text-[#6B7280]">{server.providerName ?? "-"} · {server.location ?? "-"}</p>
+                        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[12px] text-[#6B7280]">
+                          <ProviderLogo name={server.providerName || "Provider"} website={server.providerWebsite} size="sm" className="h-5 w-5 rounded-[5px]" />
+                          <span className="min-w-0 truncate">{server.providerName ?? "-"}</span>
+                          <span className="shrink-0 text-[#CBD5E1]">·</span>
+                          <span className="min-w-0 truncate">{server.location ?? "-"}</span>
+                        </span>
                       </button>
                       <StatusBadge value={server.status} label={server.status === "restricted" ? "Restricted" : server.status === "warmup" ? "Warmup" : server.status === "active" ? "Active" : "Paused"} />
                     </div>
@@ -1099,7 +1106,12 @@ export default function SendingPage() {
                             <p className="text-[11px] text-[#6B7280]">{server.location ?? "-"}</p>
                           </button>
                         </td>
-                        <td className="px-3 py-3 text-[13px] font-medium text-[#111827]">{server.providerName ?? "-"}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex min-w-[140px] items-center gap-2">
+                            <ProviderLogo name={server.providerName || "Provider"} website={server.providerWebsite} size="sm" className="h-6 w-6 rounded-[5px]" />
+                            <span className="truncate text-[13px] font-medium text-[#111827]">{server.providerName ?? "-"}</span>
+                          </div>
+                        </td>
                         <td className="px-3 py-3">
                           <div className="w-[170px]">
                             <div className="flex items-center gap-1">
