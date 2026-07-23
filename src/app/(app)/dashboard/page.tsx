@@ -619,18 +619,18 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
+      <div className="grid grid-cols-1 items-start gap-4 min-[2000px]:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
         {/* Providers Requiring Action */}
-        <div className="bg-white rounded-[10px] border border-[#E5E7EB]">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <div className="flex items-center gap-2">
+        <div className="min-w-0 rounded-[10px] border border-[#E5E7EB] bg-white">
+          <div className="flex flex-col gap-3 px-5 pb-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
               <h3 className="text-[15px] font-semibold text-[#111827]">Providers Requiring Action</h3>
               <Info className="h-4 w-4 text-[#9CA3AF]" />
               <span className="inline-flex items-center justify-center h-[22px] min-w-[22px] rounded-full bg-[#EEF2FF] px-1.5 text-[11px] font-semibold text-[#4F46E5]">
                 {actionProviders.length}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <Link href="/providers" className="text-[13px] font-medium text-[#4F46E5] hover:underline">
                 View All Providers
               </Link>
@@ -640,7 +640,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[860px]">
               <thead>
                 <tr className="border-t border-[#E5E7EB]">
                   <th className="text-left text-[12px] font-semibold text-[#4B5563] px-5 py-3 uppercase tracking-[0.03em]">
@@ -786,45 +786,47 @@ export default function DashboardPage() {
                 No servers available yet.
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Total</p>
-                    <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{totalDashboardServers}</p>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] min-[2000px]:grid-cols-1">
+                <div className="min-w-0 space-y-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Total</p>
+                      <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{totalDashboardServers}</p>
+                    </div>
+                    <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Active</p>
+                      <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{stats?.servers.active ?? 0}</p>
+                    </div>
+                    <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Other</p>
+                      <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{Math.max(0, totalDashboardServers - (stats?.servers.active ?? 0))}</p>
+                    </div>
                   </div>
-                  <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Active</p>
-                    <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{stats?.servers.active ?? 0}</p>
-                  </div>
-                  <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Other</p>
-                    <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{Math.max(0, totalDashboardServers - (stats?.servers.active ?? 0))}</p>
-                  </div>
-                </div>
 
-                <div className="space-y-2.5">
-                  {serverStatusBreakdown.map((item) => {
-                    const label = item.status.replace(/_/g, " ");
-                    const color = serverStatusColors[item.status] || "#4F46E5";
-                    const width = `${Math.max(8, (item.count / maxServerStatusCount) * 100)}%`;
-                    return (
-                      <div key={item.status}>
-                        <div className="mb-1 flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                            <span className="truncate text-[12px] font-semibold capitalize text-[#374151]">{label}</span>
+                  <div className="space-y-2.5">
+                    {serverStatusBreakdown.map((item) => {
+                      const label = item.status.replace(/_/g, " ");
+                      const color = serverStatusColors[item.status] || "#4F46E5";
+                      const width = `${Math.max(8, (item.count / maxServerStatusCount) * 100)}%`;
+                      return (
+                        <div key={item.status}>
+                          <div className="mb-1 flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                              <span className="truncate text-[12px] font-semibold capitalize text-[#374151]">{label}</span>
+                            </div>
+                            <span className="text-[12px] font-bold text-[#111827]">{item.count}</span>
                           </div>
-                          <span className="text-[12px] font-bold text-[#111827]">{item.count}</span>
+                          <div className="h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
+                            <div className="h-full rounded-full" style={{ width, backgroundColor: color }} />
+                          </div>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
-                          <div className="h-full rounded-full" style={{ width, backgroundColor: color }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="rounded-[8px] border border-[#E5E7EB]">
+                <div className="min-w-0 rounded-[8px] border border-[#E5E7EB]">
                   <div className="flex items-center justify-between border-b border-[#F1F5F9] px-3 py-2">
                     <p className="text-[12px] font-semibold text-[#111827]">Latest Servers</p>
                     {remainingDashboardServers > 0 && (
