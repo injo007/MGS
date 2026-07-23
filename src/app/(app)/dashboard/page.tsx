@@ -358,6 +358,8 @@ export default function DashboardPage() {
   const maxWeeklySends = Math.max(1, ...weeklySendingLeaders.map((user) => user.totalSends));
   const totalRankedProviders = providerContactLeaders.reduce((sum, user) => sum + user.providerCount, 0);
   const totalRankedSends = weeklySendingLeaders.reduce((sum, user) => sum + user.totalSends, 0);
+  const displayedDashboardServers = dashboardServers.slice(0, 3);
+  const remainingDashboardServers = Math.max(0, dashboardServers.length - displayedDashboardServers.length);
 
   const chartTooltipStyle = {
     borderRadius: "8px",
@@ -589,7 +591,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
         {/* Providers Requiring Action */}
         <div className="bg-white rounded-[10px] border border-[#E5E7EB]">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -728,7 +730,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Servers */}
-        <div className="flex h-full min-w-0 flex-col rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex min-w-0 flex-col rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h3 className="text-[15px] font-semibold text-[#111827]">Servers</h3>
@@ -738,54 +740,53 @@ export default function DashboardPage() {
               View All Servers
             </Link>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#E5E7EB]">
+          <div className="border-t border-[#E5E7EB]">
             {loading ? (
               <div className="space-y-0">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="border-b border-[#F1F5F9] px-5 py-3.5">
-                    <div className="h-4 w-36 animate-pulse rounded bg-gray-100" />
-                    <div className="mt-2 h-3 w-56 animate-pulse rounded bg-gray-100" />
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="border-b border-[#F1F5F9] px-5 py-3">
+                    <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
+                    <div className="mt-2 h-3 w-44 animate-pulse rounded bg-gray-100" />
                   </div>
                 ))}
               </div>
             ) : dashboardServers.length === 0 ? (
-              <div className="flex h-[260px] items-center justify-center px-5 text-center text-[13px] text-[#6B7280]">
+              <div className="flex h-[160px] items-center justify-center px-5 text-center text-[13px] text-[#6B7280]">
                 No servers available yet.
               </div>
             ) : (
               <div className="divide-y divide-[#F1F5F9]">
-                {dashboardServers.map((server) => (
-                  <div key={server.id} className="px-5 py-3.5 hover:bg-[#F8FAFC]">
-                    <div className="flex items-start justify-between gap-3">
+                {displayedDashboardServers.map((server) => (
+                  <div key={server.id} className="px-5 py-3 hover:bg-[#F8FAFC]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
                       <div className="min-w-0">
-                        <Link href="/servers" className="block truncate text-[13px] font-bold text-[#2563EB] hover:underline">
-                          {server.name}
-                        </Link>
-                        <p className="mt-1 truncate text-[12px] font-medium text-[#374151]">
-                          {server.providerName ?? "No provider"}
-                        </p>
-                        <p className="mt-0.5 truncate text-[11px] text-[#6B7280]">{server.location ?? "No region"}</p>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Link href="/servers" className="truncate text-[13px] font-bold text-[#2563EB] hover:underline">
+                            {server.name}
+                          </Link>
+                          <span className="shrink-0 text-[11px] text-[#CBD5E1]">/</span>
+                          <span className="truncate text-[12px] font-medium text-[#374151]">{server.providerName ?? "No provider"}</span>
+                        </div>
+                        <p className="mt-1 truncate text-[11px] text-[#6B7280]">{server.location ?? "No region"}</p>
                       </div>
                       <StatusBadge value={server.status} />
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
-                      <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] px-2 py-1.5">
-                        <p className="text-[#9CA3AF]">Cost</p>
-                        <p className="mt-0.5 font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</p>
-                      </div>
-                      <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] px-2 py-1.5">
-                        <p className="text-[#9CA3AF]">IPs</p>
-                        <p className="mt-0.5 font-semibold text-[#111827]">{server.ipCount ?? 0}</p>
-                      </div>
-                      <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] px-2 py-1.5 max-sm:col-span-2">
-                        <p className="text-[#9CA3AF]">Assigned</p>
-                        <p className="mt-0.5 truncate font-semibold text-[#111827]">
-                          {server.assignedUsers?.[0]?.name ?? "-"}
-                        </p>
-                      </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280]">
+                      <span><span className="font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</span> monthly</span>
+                      <span><span className="font-semibold text-[#111827]">{server.ipCount ?? 0}</span> IPs</span>
+                      <span className="min-w-0 truncate"><span className="font-semibold text-[#111827]">Assigned:</span> {server.assignedUsers?.[0]?.name ?? "-"}</span>
                     </div>
                   </div>
                 ))}
+                {remainingDashboardServers > 0 && (
+                  <Link
+                    href="/servers"
+                    className="flex items-center justify-between px-5 py-3 text-[12px] font-semibold text-[#4F46E5] hover:bg-[#F8FAFC]"
+                  >
+                    <span>{remainingDashboardServers} more server{remainingDashboardServers === 1 ? "" : "s"}</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                )}
               </div>
             )}
           </div>
