@@ -3,10 +3,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, users, auditLogs, servers, sendingLogs, serverUsers, notes } from "@/db/schema";
+import { providers, users, auditLogs, servers, sendingLogs, serverUsers, notes, outreachLogs } from "@/db/schema";
 import { eq, ilike, desc, asc, and, count, sql, inArray } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 import { sendAuditTelegramAlert } from "@/lib/telegram";
+import { getCachedImapInbox, getImapConfigs } from "@/lib/imap-service";
 
 function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof providers.$inferInsert> {
   const allowedFields = [
@@ -132,6 +133,15 @@ function cleanFormNote(value: unknown) {
   return String(value).trim();
 }
 
+type ProviderUserSource = "provider" | "contact" | "server" | "creator";
+
+const providerUserSourcePriority: Record<ProviderUserSource, number> = {
+  provider: 4,
+  contact: 3,
+  server: 2,
+  creator: 1,
+};
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -231,16 +241,17 @@ export async function GET(request: Request) {
 
   const total = totalResult[0]?.total || 0;
   const providerIds = data.map((provider) => provider.id);
-  const usageUsersByProvider = new Map<string, Map<string, { id: string; name: string; email: string; source: "provider" | "server" | "creator" }>>();
+  const usageUsersByProvider = new Map<string, Map<string, { id: string; name: string; email: string; source: ProviderUserSource }>>();
 
   const addUsageUser = (
     providerId: string,
-    user: { id: string | null; name: string | null; email: string | null; source: "provider" | "server" | "creator" }
+    user: { id: string | null; name: string | null; email: string | null; source: ProviderUserSource }
   ) => {
     if (!user.id || !user.name || !user.email) return;
     if (!usageUsersByProvider.has(providerId)) usageUsersByProvider.set(providerId, new Map());
     const existing = usageUsersByProvider.get(providerId)!;
-    if (!existing.has(user.id) || user.source === "provider") {
+    const current = existing.get(user.id);
+    if (!current || providerUserSourcePriority[user.source] > providerUserSourcePriority[current.source]) {
       existing.set(user.id, { id: user.id, name: user.name, email: user.email, source: user.source });
     }
   };
@@ -255,7 +266,7 @@ export async function GET(request: Request) {
   }
 
   if (providerIds.length > 0) {
-    const [serverAssignees, serverCreators] = await Promise.all([
+    const [serverAssignees, serverCreators, outreachContacts, appUsers, imapAccounts, cachedInbox] = await Promise.all([
       db
         .select({
           providerId: servers.providerId,
@@ -277,7 +288,57 @@ export async function GET(request: Request) {
         .from(servers)
         .innerJoin(users, eq(users.id, servers.createdById))
         .where(inArray(servers.providerId, providerIds)),
+      db
+        .select({
+          providerId: outreachLogs.providerId,
+          userId: users.id,
+          userName: users.name,
+          userEmail: users.email,
+        })
+        .from(outreachLogs)
+        .innerJoin(users, eq(users.id, outreachLogs.sentById))
+        .where(and(inArray(outreachLogs.providerId, providerIds), eq(outreachLogs.channel, "email")))
+        .orderBy(desc(outreachLogs.date)),
+      db.select({ id: users.id, name: users.name, email: users.email }).from(users),
+      getImapConfigs(undefined, true),
+      getCachedImapInbox(),
     ]);
+
+    const usersById = new Map(appUsers.map((user) => [user.id, user]));
+    const userIdByEmail = new Map(appUsers.map((user) => [user.email.toLowerCase(), user.id]));
+    const mailboxOwnerBySource = new Map<string, string>();
+    for (const account of imapAccounts) {
+      const source = account.user.toLowerCase();
+      const ownerId = account.assignedUserId || userIdByEmail.get(source) || "";
+      if (ownerId) mailboxOwnerBySource.set(source, ownerId);
+    }
+
+    const contactedProvidersWithEvidence = new Set<string>();
+    const providerIdSet = new Set(providerIds);
+    for (const email of cachedInbox?.emails || []) {
+      if (email.direction !== "outgoing" || !email.matchedProviderId || !providerIdSet.has(email.matchedProviderId)) continue;
+      const ownerId = mailboxOwnerBySource.get((email.sourceEmail || "").toLowerCase());
+      const owner = ownerId ? usersById.get(ownerId) : null;
+      if (!owner) continue;
+      contactedProvidersWithEvidence.add(email.matchedProviderId);
+      addUsageUser(email.matchedProviderId, { id: owner.id, name: owner.name, email: owner.email, source: "contact" });
+    }
+
+    for (const row of outreachContacts) {
+      if (contactedProvidersWithEvidence.has(row.providerId)) continue;
+      contactedProvidersWithEvidence.add(row.providerId);
+      addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "contact" });
+    }
+
+    const marouane = appUsers.find((user) => user.email.toLowerCase() === "marouane@cloudops.com")
+      || appUsers.find((user) => user.name.toLowerCase().includes("marouane"));
+    if (marouane) {
+      for (const provider of data) {
+        if (provider.contactStatus === "contacted" && !contactedProvidersWithEvidence.has(provider.id)) {
+          addUsageUser(provider.id, { id: marouane.id, name: marouane.name, email: marouane.email, source: "contact" });
+        }
+      }
+    }
 
     for (const row of serverAssignees) {
       addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "server" });

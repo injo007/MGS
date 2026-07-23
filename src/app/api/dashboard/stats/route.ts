@@ -87,6 +87,7 @@ export async function GET(request: Request) {
     allUsers,
     currentWeekSendingByUser,
     providerContactOutreachRows,
+    contactedProviderRows,
     imapAccounts,
     cachedInbox,
   ] = await Promise.all([
@@ -258,6 +259,11 @@ export async function GET(request: Request) {
       .orderBy(sql`count(distinct ${outreachLogs.providerId}) desc`, sql`count(*) desc`)
       .limit(8),
 
+    db
+      .select({ id: providers.id })
+      .from(providers)
+      .where(providerUserCondition ? and(eq(providers.contactStatus, "contacted"), providerUserCondition) : eq(providers.contactStatus, "contacted")),
+
     getImapConfigs(undefined, true),
 
     getCachedImapInbox(),
@@ -276,8 +282,10 @@ export async function GET(request: Request) {
     providerIds: Set<string>;
     emailCount: number;
     mailboxes: Set<string>;
+    sources: Set<string>;
     lastContactAt: string | null;
   }>();
+  const contactedProvidersWithEvidence = new Set<string>();
 
   for (const email of cachedInbox?.emails || []) {
     if (email.direction !== "outgoing" || !email.matchedProviderId) continue;
@@ -288,13 +296,16 @@ export async function GET(request: Request) {
         providerIds: new Set(),
         emailCount: 0,
         mailboxes: new Set(),
+        sources: new Set(),
         lastContactAt: null,
       });
     }
     const row = providerContactsByUser.get(ownerId)!;
+    contactedProvidersWithEvidence.add(email.matchedProviderId);
     row.providerIds.add(email.matchedProviderId);
     row.emailCount += 1;
     if (email.sourceEmail) row.mailboxes.add(email.sourceEmail);
+    row.sources.add("Inbox");
     if (!row.lastContactAt || new Date(email.date).getTime() > new Date(row.lastContactAt).getTime()) {
       row.lastContactAt = email.date;
     }
@@ -307,18 +318,45 @@ export async function GET(request: Request) {
         providerIds: new Set(),
         emailCount: 0,
         mailboxes: new Set(),
+        sources: new Set(),
         lastContactAt: null,
       });
     }
     const row = providerContactsByUser.get(item.userId)!;
-    for (const providerId of item.providerIds || []) row.providerIds.add(providerId);
+    for (const providerId of item.providerIds || []) {
+      row.providerIds.add(providerId);
+      contactedProvidersWithEvidence.add(providerId);
+    }
     row.emailCount = Math.max(row.emailCount, Number(item.emailCount || 0));
+    row.sources.add("CRM email logs");
     if (!row.lastContactAt || (item.lastContactAt && item.lastContactAt.getTime() > new Date(row.lastContactAt).getTime())) {
       row.lastContactAt = item.lastContactAt?.toISOString() || row.lastContactAt;
     }
   }
 
+  const marouane = allUsers.find((user) => user.email.toLowerCase() === "marouane@cloudops.com")
+    || allUsers.find((user) => user.name.toLowerCase().includes("marouane"));
+  if (marouane) {
+    if (!providerContactsByUser.has(marouane.id)) {
+      providerContactsByUser.set(marouane.id, {
+        providerIds: new Set(),
+        emailCount: 0,
+        mailboxes: new Set(),
+        sources: new Set(),
+        lastContactAt: null,
+      });
+    }
+    const row = providerContactsByUser.get(marouane.id)!;
+    for (const provider of contactedProviderRows) {
+      if (!contactedProvidersWithEvidence.has(provider.id)) {
+        row.providerIds.add(provider.id);
+        row.sources.add("Contacted status fallback");
+      }
+    }
+  }
+
   const providerContactLeaderboard = Array.from(providerContactsByUser.entries())
+    .filter(([, value]) => value.providerIds.size > 0 || value.emailCount > 0)
     .map(([userId, value]) => {
       const profile = usersById.get(userId);
       return {
@@ -329,7 +367,7 @@ export async function GET(request: Request) {
         emailCount: value.emailCount,
         mailboxCount: value.mailboxes.size,
         lastContactAt: value.lastContactAt,
-        source: value.mailboxes.size > 0 ? "Inbox + CRM logs" : "CRM email logs",
+        source: Array.from(value.sources).join(" + ") || "Contacted status fallback",
       };
     })
     .sort((a, b) => b.providerCount - a.providerCount || b.emailCount - a.emailCount)

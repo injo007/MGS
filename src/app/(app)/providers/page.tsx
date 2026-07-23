@@ -62,7 +62,7 @@ interface Provider {
     id: string;
     name: string;
     email: string;
-    source: "provider" | "server" | "creator";
+    source: "provider" | "contact" | "server" | "creator";
   }>;
   lastContactDate: string | null;
   totalServers: number;
@@ -118,6 +118,12 @@ function providerRowTone(provider: Provider) {
 
 function providerNote(provider: Provider) {
   return provider.notes || provider.abusePolicyNotes || provider.sendingRestrictions || "—";
+}
+
+function assignedUserChipClass(source: Provider["assignedUsers"][number]["source"]) {
+  if (source === "contact") return "bg-[#ECFEFF] text-[#0891B2]";
+  if (source === "server") return "bg-[#ECFDF5] text-[#15803D]";
+  return "bg-[#EEF2FF] text-[#4F46E5]";
 }
 
 export default function ProvidersPage() {
@@ -412,7 +418,7 @@ export default function ProvidersPage() {
                   Billing
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
-                  Assigned
+                  Assigned / Contacted
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Last / Next
@@ -561,7 +567,7 @@ export default function ProvidersPage() {
                       {(provider.assignedUsers?.length || provider.assignedUserName) ? (
                         <div className="flex max-w-[180px] flex-wrap gap-1">
                           {(provider.assignedUsers?.length ? provider.assignedUsers : [{ id: provider.assignedUserId || "assigned", name: provider.assignedUserName || "Assigned", email: provider.assignedUserEmail || "", source: "provider" as const }]).slice(0, 3).map((user) => (
-                            <span key={user.id} title={`${user.name}${user.source === "provider" ? " · provider assigned" : user.source === "server" ? " · assigned to server" : " · created server"}`} className="inline-flex items-center gap-1 rounded-[999px] bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-[#4F46E5]">
+                            <span key={user.id} title={`${user.name}${user.source === "provider" ? " · provider assigned" : user.source === "contact" ? " · contacted provider" : user.source === "server" ? " · assigned to server" : " · created server"}`} className={`inline-flex items-center gap-1 rounded-[999px] px-2 py-0.5 text-[11px] font-semibold ${assignedUserChipClass(user.source)}`}>
                               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[8px]">
                                 {user.name.charAt(0)}
                               </span>
