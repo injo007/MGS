@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -61,6 +62,7 @@ const providerSchema = z.object({
   monthlyBilling: optionalBoolean,
   abusePolicyNotes: optionalText,
   assignedUserId: optionalText,
+  manualContactedByUserId: optionalText,
   notes: optionalText,
 });
 
@@ -101,6 +103,7 @@ const normalizeProviderFormData = (data: Record<string, unknown>): ProviderFormD
   monthlyBilling: Boolean(data.monthlyBilling),
   abusePolicyNotes: textOrEmpty(data.abusePolicyNotes),
   assignedUserId: textOrEmpty(data.assignedUserId),
+  manualContactedByUserId: textOrEmpty(data.manualContactedByUserId),
   notes: textOrEmpty(data.notes),
 });
 
@@ -133,6 +136,7 @@ const buildProviderPayload = (data: ProviderFormData) => {
     "refundPolicy",
     "abusePolicyNotes",
     "assignedUserId",
+    "manualContactedByUserId",
     "notes",
   ];
 
@@ -160,12 +164,15 @@ export default function NewProviderPage() {
 function NewProviderForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const editId = searchParams.get("edit");
   const isEditMode = !!editId;
+  const isAdmin = String((session?.user as Record<string, unknown> | undefined)?.roleName || "").toLowerCase() === "admin";
 
   const [isSaving, setIsSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [initialManualContactedByUserId, setInitialManualContactedByUserId] = useState("");
 
   const form = useForm<ProviderFormData>({
     resolver: zodResolver(providerSchema) as Resolver<ProviderFormData>,
@@ -188,6 +195,7 @@ function NewProviderForm() {
       mailServerAllowed: false,
       currency: "USD",
       notes: "",
+      manualContactedByUserId: "",
     },
   });
 
@@ -219,6 +227,7 @@ function NewProviderForm() {
             formatted[key] = val;
           }
         }
+        setInitialManualContactedByUserId(textOrEmpty(formatted.manualContactedByUserId));
         form.reset(normalizeProviderFormData(formatted));
       })
       .catch((err) => {
@@ -234,10 +243,14 @@ function NewProviderForm() {
     try {
       const url = isEditMode ? `/api/providers/${editId}` : "/api/providers";
       const method = isEditMode ? "PUT" : "POST";
+      const payload = buildProviderPayload(data);
+      if (!isEditMode || !isAdmin || !data.manualContactedByUserId || data.manualContactedByUserId === initialManualContactedByUserId) {
+        delete payload.manualContactedByUserId;
+      }
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildProviderPayload(data)),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(isEditMode ? "Failed to update provider" : "Failed to create provider");
       toast.success(isEditMode ? "Provider updated successfully" : "Provider created successfully");
@@ -643,18 +656,38 @@ function NewProviderForm() {
             <h3 className="text-[13px] font-semibold text-[#111827]">Assignment</h3>
           </div>
           <div className="p-5">
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-medium text-[#374151]">Assigned Owner</label>
-              <select
-                value={form.watch("assignedUserId") || ""}
-                onChange={(e) => form.setValue("assignedUserId", e.target.value || undefined)}
-                className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
-              >
-                <option value="">Unassigned</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-medium text-[#374151]">Assigned Owner</label>
+                <select
+                  value={form.watch("assignedUserId") || ""}
+                  onChange={(e) => form.setValue("assignedUserId", e.target.value || undefined)}
+                  className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
+                >
+                  <option value="">Unassigned</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+              {isEditMode && isAdmin && (
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-medium text-[#374151]">Contacted By</label>
+                  <select
+                    value={form.watch("manualContactedByUserId") || ""}
+                    onChange={(e) => form.setValue("manualContactedByUserId", e.target.value || undefined)}
+                    className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
+                  >
+                    <option value="">Not set manually</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[12px] text-[#6B7280]">
+                    Use this when the provider was contacted through a website form or ticket instead of a synced email conversation.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

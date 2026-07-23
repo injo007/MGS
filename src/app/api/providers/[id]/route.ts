@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { providers, users, auditLogs, sendingLogs, notes } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { providers, users, auditLogs, sendingLogs, notes, outreachLogs } from "@/db/schema";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { detectProviderCountry } from "@/lib/provider-country";
 import { sendAuditTelegramAlert } from "@/lib/telegram";
+import { forbidden, isAdmin, sessionUserId } from "@/lib/access-control";
 
 function cleanProviderPayload(body: Record<string, unknown>): Partial<typeof providers.$inferInsert> {
   const allowedFields = [
@@ -116,6 +117,61 @@ async function saveProviderFormNote(providerId: string, authorId: string, value:
   return created;
 }
 
+function cleanManualContactUserId(value: unknown) {
+  const requested = typeof value === "string" ? value.trim() : "";
+  return requested || null;
+}
+
+async function recordManualProviderContact({
+  providerId,
+  contactedByUserId,
+  actorUserId,
+  providerName,
+  dateFirstContacted,
+}: {
+  providerId: string;
+  contactedByUserId: string | null;
+  actorUserId: string;
+  providerName: string;
+  dateFirstContacted: Date | null;
+}) {
+  if (!contactedByUserId) return null;
+
+  const now = new Date();
+  const [created] = await db
+    .insert(outreachLogs)
+    .values({
+      providerId,
+      date: now,
+      channel: "contact_form",
+      sentById: contactedByUserId,
+      sendResult: "sent",
+      subject: "Website form contact",
+      message: `Manual website form contact recorded for provider ${providerName}.`,
+    })
+    .returning();
+
+  await db
+    .update(providers)
+    .set({
+      contactStatus: "contacted",
+      dateFirstContacted: dateFirstContacted || now,
+      lastContactDate: now,
+      updatedAt: now,
+    })
+    .where(eq(providers.id, providerId));
+
+  await db.insert(auditLogs).values({
+    userId: actorUserId,
+    action: "create",
+    entityType: "outreach",
+    entityId: created.id,
+    newValue: created,
+  });
+
+  return created;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -178,8 +234,23 @@ export async function GET(
   }
 
   const [latestNote] = await latestProviderNoteExpr(id);
+  const [latestContact] = await db
+    .select({
+      userId: outreachLogs.sentById,
+      userName: users.name,
+    })
+    .from(outreachLogs)
+    .innerJoin(users, eq(users.id, outreachLogs.sentById))
+    .where(and(eq(outreachLogs.providerId, id), isNotNull(outreachLogs.sentById)))
+    .orderBy(desc(outreachLogs.date))
+    .limit(1);
 
-  return NextResponse.json({ ...provider, notes: latestNote?.content || "" });
+  return NextResponse.json({
+    ...provider,
+    notes: latestNote?.content || "",
+    manualContactedByUserId: latestContact?.userId || "",
+    manualContactedByUserName: latestContact?.userName || null,
+  });
 }
 
 export async function PUT(
@@ -204,6 +275,11 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const manualContactedByUserId = cleanManualContactUserId(body.manualContactedByUserId);
+  if (manualContactedByUserId && !isAdmin(session)) {
+    return forbidden("Only admins can manually set who contacted a provider.");
+  }
+
   const countryProvided = Object.prototype.hasOwnProperty.call(body, "country");
   const detectedCountry = countryProvided && !body.country
     ? detectProviderCountry({
@@ -222,6 +298,16 @@ export async function PUT(
 
   if (Object.prototype.hasOwnProperty.call(body, "notes")) {
     await saveProviderFormNote(id, session.user.id, body.notes);
+  }
+
+  if (manualContactedByUserId) {
+    await recordManualProviderContact({
+      providerId: id,
+      contactedByUserId: manualContactedByUserId,
+      actorUserId: sessionUserId(session),
+      providerName: updated.name,
+      dateFirstContacted: existing.dateFirstContacted,
+    });
   }
 
   await db.insert(auditLogs).values({
