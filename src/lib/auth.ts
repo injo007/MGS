@@ -79,6 +79,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.roleId = (user as any).roleId;
         token.roleName = (user as any).roleName;
+        token.image = (user as any).image;
       }
       return token;
     },
@@ -87,6 +88,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         (session.user as any).id = token.sub;
         (session.user as any).roleId = token.roleId;
         (session.user as any).roleName = token.roleName;
+        session.user.image = token.image as string | null | undefined;
       }
       return session;
     },

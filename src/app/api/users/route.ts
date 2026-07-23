@@ -112,12 +112,14 @@ export async function POST(request: Request) {
   }
 
   const hashedPassword = body.password ? await hash(body.password, 12) : null;
+  const image = typeof body.image === "string" && body.image.trim() ? body.image.trim() : null;
 
   const [created] = await db
     .insert(users)
     .values({
       name: body.name,
       email: body.email,
+      image,
       hashedPassword,
       roleId: body.roleId || null,
       status: body.status || "active",
@@ -142,7 +144,7 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json(
-    { id: created.id, name: created.name, email: created.email, status: created.status },
+    { id: created.id, name: created.name, email: created.email, image: created.image, status: created.status },
     { status: 201 }
   );
 }

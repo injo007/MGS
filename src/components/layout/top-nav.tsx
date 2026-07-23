@@ -177,6 +177,7 @@ export function TopNav({
 
   const userName = session?.user?.name ?? "Michael Scott";
   const userEmail = session?.user?.email ?? "";
+  const userImage = session?.user?.image || "";
   const userRole = (session?.user as Record<string, unknown>)?.roleName as string | undefined;
   const currentUserId = (session?.user as Record<string, unknown>)?.id as string | undefined;
   const initials = userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -410,8 +411,13 @@ export function TopNav({
           <DropdownMenuTrigger render={
             <button className="flex items-center gap-2.5 h-[38px] rounded-[7px] px-2 text-[#374151] hover:bg-[#F9FAFB] transition-colors cursor-pointer" />
           }>
-            <div className="h-8 w-8 rounded-full bg-[#4F46E5] flex items-center justify-center">
-              <span className="text-[11px] font-bold text-white">{initials}</span>
+            <div className="h-8 w-8 overflow-hidden rounded-full bg-[#4F46E5] flex items-center justify-center ring-1 ring-[#E5E7EB]">
+              {userImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userImage} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-[11px] font-bold text-white">{initials}</span>
+              )}
             </div>
             <div className="hidden md:flex flex-col items-start">
               <span className="text-[13px] font-semibold text-[#111827] leading-none">{userName}</span>

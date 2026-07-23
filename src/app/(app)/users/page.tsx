@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Inbox, Loader2 } from "lucide-react";
+import { ImageIcon, Plus, Inbox, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserItem {
@@ -25,6 +25,15 @@ interface RoleOption {
   name: string;
 }
 
+interface UserSavePayload {
+  name: string;
+  email: string;
+  image: string | null;
+  roleId: string | null;
+  status: string;
+  password?: string;
+}
+
 export default function UsersPage() {
   const [data, setData] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,10 +46,40 @@ export default function UsersPage() {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    image: "",
     password: "",
     roleId: "",
     status: "active",
   });
+
+  const userInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const avatarImage = (image: string | null, name: string, className = "h-8 w-8") => (
+    <div className={`${className} overflow-hidden rounded-full bg-[#EEF2FF] flex items-center justify-center text-[11px] font-bold text-[#4F46E5] ring-1 ring-[#E5E7EB]`}>
+      {image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span>{userInitials(name)}</span>
+      )}
+    </div>
+  );
+
+  const setImageFromFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      toast.error("Image must be 1 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setForm((current) => ({ ...current, image: String(reader.result || "") }));
+    reader.onerror = () => toast.error("Failed to read image");
+    reader.readAsDataURL(file);
+  };
 
   const fetchData = () => {
     fetch("/api/users?pageSize=100")
@@ -60,25 +99,21 @@ export default function UsersPage() {
     }
   }, [showCreate, editingUser]);
 
-  useEffect(() => {
-    if (editingUser) {
-      setForm({
-        name: editingUser.name,
-        email: editingUser.email,
-        password: "",
-        roleId: editingUser.roleId || "",
-        status: editingUser.status,
-      });
-    }
-  }, [editingUser]);
-
   const openCreate = () => {
     setEditingUser(null);
-    setForm({ name: "", email: "", password: "", roleId: "", status: "active" });
+    setForm({ name: "", email: "", image: "", password: "", roleId: "", status: "active" });
     setShowCreate(true);
   };
 
   const openEdit = (user: UserItem) => {
+    setForm({
+      name: user.name,
+      email: user.email,
+      image: user.image || "",
+      password: "",
+      roleId: user.roleId || "",
+      status: user.status,
+    });
     setEditingUser(user);
     setShowCreate(true);
   };
@@ -95,9 +130,10 @@ export default function UsersPage() {
     setSaving(true);
     try {
       if (editingUser) {
-        const body: Record<string, any> = {
+        const body: UserSavePayload = {
           name: form.name.trim(),
           email: form.email.trim(),
+          image: form.image.trim() || null,
           roleId: form.roleId || null,
           status: form.status,
         };
@@ -119,6 +155,7 @@ export default function UsersPage() {
           body: JSON.stringify({
             name: form.name.trim(),
             email: form.email.trim(),
+            image: form.image.trim() || null,
             password: form.password,
             roleId: form.roleId || null,
             status: form.status,
@@ -204,9 +241,7 @@ export default function UsersPage() {
                   <tr key={user.id} className="border-t border-[#F1F5F9] hover:bg-[#F8FAFC] transition-colors group">
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[11px] font-bold text-[#4F46E5]">
-                          {user.name.split(" ").map(n => n[0]).join("")}
-                        </div>
+                        {avatarImage(user.image, user.name)}
                         <div>
                           <p className="text-[13px] font-medium text-[#111827]">{user.name}</p>
                           <p className="text-[12px] text-[#6B7280]">{user.email}</p>
@@ -249,6 +284,23 @@ export default function UsersPage() {
             <DialogDescription>{editingUser ? "Update user details" : "Invite a new team member"}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              {avatarImage(form.image, form.name || "User", "h-12 w-12")}
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-[#111827]">User image</p>
+                <p className="mt-0.5 text-[12px] text-[#6B7280]">Use an image URL or upload a small square image.</p>
+              </div>
+              {form.image && (
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, image: "" })}
+                  className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F1F5F9]"
+                  title="Remove image"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
               <label className="text-[13px] font-medium text-[#374151]">Name *</label>
               <input
@@ -267,6 +319,30 @@ export default function UsersPage() {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[13px] font-medium text-[#374151]">Image</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <ImageIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+                  <input
+                    placeholder="https://example.com/avatar.jpg"
+                    value={form.image}
+                    onChange={(e) => setForm({ ...form, image: e.target.value })}
+                    className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white pl-9 pr-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+                  />
+                </div>
+                <label className="inline-flex h-[34px] cursor-pointer items-center gap-1.5 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] font-medium text-[#374151] hover:bg-[#F9FAFB]">
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(event) => setImageFromFile(event.target.files?.[0])}
+                  />
+                </label>
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-[13px] font-medium text-[#374151]">{editingUser ? "New Password (leave blank to keep)" : "Password *"}</label>

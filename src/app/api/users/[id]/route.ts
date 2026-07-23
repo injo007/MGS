@@ -29,6 +29,7 @@ export async function PUT(
   const updateData: Record<string, any> = {};
   if (body.name !== undefined) updateData.name = body.name;
   if (body.email !== undefined) updateData.email = body.email;
+  if (body.image !== undefined) updateData.image = typeof body.image === "string" && body.image.trim() ? body.image.trim() : null;
   if (body.roleId !== undefined) updateData.roleId = body.roleId;
   if (body.status !== undefined) updateData.status = body.status;
   if (body.password) {
@@ -46,6 +47,7 @@ export async function PUT(
   const changedFields = [
     body.name !== undefined && body.name !== existing[0].name ? "name" : null,
     body.email !== undefined && body.email !== existing[0].email ? "email" : null,
+    body.image !== undefined && body.image !== existing[0].image ? "image" : null,
     body.password ? "password" : null,
   ].filter(Boolean);
 
@@ -74,14 +76,15 @@ export async function PUT(
     action: "update",
     entityType: "user",
     entityId: id,
-    previousValue: { name: existing[0].name, email: existing[0].email, status: existing[0].status },
-    newValue: { name: updated.name, email: updated.email, status: updated.status },
+    previousValue: { name: existing[0].name, email: existing[0].email, image: existing[0].image, status: existing[0].status },
+    newValue: { name: updated.name, email: updated.email, image: updated.image, status: updated.status },
   });
 
   return NextResponse.json({
     id: updated.id,
     name: updated.name,
     email: updated.email,
+    image: updated.image,
     status: updated.status,
   });
 }
