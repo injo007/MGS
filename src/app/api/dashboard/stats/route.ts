@@ -234,10 +234,9 @@ export async function GET(request: Request) {
       })
       .from(sendingLogs)
       .leftJoin(users, eq(sendingLogs.mailerId, users.id))
-      .where(assignedSendingCondition ? and(gte(sendingLogs.date, currentWeekStart), assignedSendingCondition) : gte(sendingLogs.date, currentWeekStart))
+      .where(gte(sendingLogs.date, currentWeekStart))
       .groupBy(sendingLogs.mailerId, users.name, users.email)
-      .orderBy(sql`coalesce(sum(${sendingLogs.actualSends}), 0) desc`)
-      .limit(8),
+      .orderBy(sql`coalesce(sum(${sendingLogs.actualSends}), 0) desc`),
 
     db
       .select({
@@ -250,26 +249,20 @@ export async function GET(request: Request) {
       })
       .from(outreachLogs)
       .leftJoin(users, eq(outreachLogs.sentById, users.id))
-      .where(
-        scopedUserId
-          ? and(eq(outreachLogs.channel, "email"), eq(outreachLogs.sentById, scopedUserId))
-          : eq(outreachLogs.channel, "email")
-      )
+      .where(eq(outreachLogs.channel, "email"))
       .groupBy(outreachLogs.sentById, users.name, users.email)
-      .orderBy(sql`count(distinct ${outreachLogs.providerId}) desc`, sql`count(*) desc`)
-      .limit(8),
+      .orderBy(sql`count(distinct ${outreachLogs.providerId}) desc`, sql`count(*) desc`),
 
     db
       .select({ id: providers.id })
       .from(providers)
-      .where(providerUserCondition ? and(eq(providers.contactStatus, "contacted"), providerUserCondition) : eq(providers.contactStatus, "contacted")),
+      .where(eq(providers.contactStatus, "contacted")),
 
     getImapConfigs(undefined, true),
 
     getCachedImapInbox(),
   ]);
 
-  const usersById = new Map(allUsers.map((user) => [user.id, user]));
   const userIdByEmail = new Map(allUsers.map((user) => [user.email.toLowerCase(), user.id]));
   const mailboxOwnerBySource = new Map<string, string>();
   for (const account of imapAccounts) {
@@ -290,7 +283,7 @@ export async function GET(request: Request) {
   for (const email of cachedInbox?.emails || []) {
     if (email.direction !== "outgoing" || !email.matchedProviderId) continue;
     const ownerId = mailboxOwnerBySource.get((email.sourceEmail || "").toLowerCase());
-    if (!ownerId || (scopedUserId && ownerId !== scopedUserId)) continue;
+    if (!ownerId) continue;
     if (!providerContactsByUser.has(ownerId)) {
       providerContactsByUser.set(ownerId, {
         providerIds: new Set(),
@@ -355,23 +348,47 @@ export async function GET(request: Request) {
     }
   }
 
-  const providerContactLeaderboard = Array.from(providerContactsByUser.entries())
-    .filter(([, value]) => value.providerIds.size > 0 || value.emailCount > 0)
-    .map(([userId, value]) => {
-      const profile = usersById.get(userId);
+  const providerContactLeaderboard = allUsers
+    .map((profile) => {
+      const value = providerContactsByUser.get(profile.id) || {
+        providerIds: new Set<string>(),
+        emailCount: 0,
+        mailboxes: new Set<string>(),
+        sources: new Set<string>(),
+        lastContactAt: null,
+      };
       return {
-        userId,
-        userName: profile?.name || "Unassigned",
-        userEmail: profile?.email || "",
+        userId: profile.id,
+        userName: profile.name,
+        userEmail: profile.email,
         providerCount: value.providerIds.size,
         emailCount: value.emailCount,
         mailboxCount: value.mailboxes.size,
         lastContactAt: value.lastContactAt,
-        source: Array.from(value.sources).join(" + ") || "Contacted status fallback",
+        source: Array.from(value.sources).join(" + ") || "No contacts yet",
       };
     })
     .sort((a, b) => b.providerCount - a.providerCount || b.emailCount - a.emailCount)
-    .slice(0, 8);
+    .slice(0, 50);
+
+  const weeklySendingByUser = new Map<string, (typeof currentWeekSendingByUser)[number]>();
+  for (const row of currentWeekSendingByUser) {
+    if (row.userId) weeklySendingByUser.set(row.userId, row);
+  }
+
+  const weeklySendingLeaderboard = allUsers
+    .map((user) => {
+      const row = weeklySendingByUser.get(user.id);
+      return {
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+        totalSends: Number(row?.totalSends || 0),
+        serverCount: Number(row?.serverCount || 0),
+        daysActive: Number(row?.daysActive || 0),
+      };
+    })
+    .sort((a, b) => b.totalSends - a.totalSends || b.serverCount - a.serverCount);
 
   const stats = {
     providers: {
@@ -450,14 +467,7 @@ export async function GET(request: Request) {
       weekStart: currentWeekStart.toISOString(),
       lastInboxSync: cachedInbox?.timestamp || null,
       providerContacts: providerContactLeaderboard,
-      weeklySending: currentWeekSendingByUser.map((r) => ({
-        userId: r.userId,
-        userName: r.userName || "Unassigned",
-        userEmail: r.userEmail || "",
-        totalSends: Number(r.totalSends),
-        serverCount: Number(r.serverCount),
-        daysActive: Number(r.daysActive),
-      })),
+      weeklySending: weeklySendingLeaderboard,
     },
   };
 

@@ -243,11 +243,6 @@ function money(value: string | null, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
 }
 
-function shortDate(value: string | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
 function isReadyToContact(provider: ProviderRow) {
   const contacted = provider.contactStatus !== "not_contacted";
   const prohibited = provider.decision === "prohibited_sending" || provider.mailServerAllowed === false;
@@ -732,8 +727,69 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Servers */}
+        <div className="flex h-full flex-col rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <h3 className="text-[15px] font-semibold text-[#111827]">Servers</h3>
+              <p className="mt-0.5 text-[12px] text-[#6B7280]">Recent server inventory across your providers.</p>
+            </div>
+            <Link href="/servers" className="text-[13px] font-medium text-[#4F46E5] hover:underline">
+              View All Servers
+            </Link>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#E5E7EB]">
+            {loading ? (
+              <div className="space-y-0">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="border-b border-[#F1F5F9] px-5 py-3.5">
+                    <div className="h-4 w-36 animate-pulse rounded bg-gray-100" />
+                    <div className="mt-2 h-3 w-56 animate-pulse rounded bg-gray-100" />
+                  </div>
+                ))}
+              </div>
+            ) : dashboardServers.length === 0 ? (
+              <div className="flex h-[260px] items-center justify-center px-5 text-center text-[13px] text-[#6B7280]">
+                No servers available yet.
+              </div>
+            ) : (
+              dashboardServers.map((server) => (
+                <div key={server.id} className="border-b border-[#F1F5F9] px-5 py-3.5 last:border-b-0 hover:bg-[#F8FAFC]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link href="/servers" className="truncate text-[13px] font-bold text-[#2563EB] hover:underline">
+                        {server.name}
+                      </Link>
+                      <p className="mt-1 truncate text-[12px] font-medium text-[#374151]">
+                        {server.providerName ?? "No provider"} · {server.location ?? "No region"}
+                      </p>
+                    </div>
+                    <StatusBadge value={server.status} />
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                    <div>
+                      <p className="text-[#9CA3AF]">Cost</p>
+                      <p className="mt-0.5 font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</p>
+                    </div>
+                    <div>
+                      <p className="text-[#9CA3AF]">IPs</p>
+                      <p className="mt-0.5 font-semibold text-[#111827]">{server.ipCount ?? 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-[#9CA3AF]">Assigned</p>
+                      <p className="mt-0.5 truncate font-semibold text-[#111827]">
+                        {server.assignedUsers?.[0]?.name ?? "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         {/* User Performance Rankings */}
-        <div className="flex h-full flex-col rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="xl:col-span-2 flex h-full flex-col rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -760,7 +816,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid flex-1 content-start gap-4">
+          <div className="grid flex-1 content-start gap-4 xl:grid-cols-2">
             <div className="min-w-0">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -771,7 +827,7 @@ export default function DashboardPage() {
                   Inbox
                 </Link>
               </div>
-              <div className="space-y-2">
+              <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
                 {loading ? (
                   Array.from({ length: 4 }).map((_, index) => (
                     <div key={index} className="h-[62px] rounded-[8px] border border-[#E5E7EB] bg-white p-3">
@@ -784,7 +840,7 @@ export default function DashboardPage() {
                     <p className="text-[13px] font-medium text-[#475569]">No sent provider conversations found</p>
                     <p className="mt-1 text-[12px] text-[#94A3B8]">Sync sent mailboxes or apply saved emails to providers.</p>
                   </div>
-                ) : providerContactLeaders.slice(0, 5).map((user, index) => (
+                ) : providerContactLeaders.map((user, index) => (
                   <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
                     <div className="flex items-center gap-2.5">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECFEFF] text-[10px] font-bold text-[#0891B2]">
@@ -821,7 +877,7 @@ export default function DashboardPage() {
                   Reports
                 </Link>
               </div>
-              <div className="space-y-2">
+              <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
                 {loading ? (
                   Array.from({ length: 4 }).map((_, index) => (
                     <div key={index} className="h-[62px] rounded-[8px] border border-[#E5E7EB] bg-white p-3">
@@ -834,7 +890,7 @@ export default function DashboardPage() {
                     <p className="text-[13px] font-medium text-[#475569]">No sending numbers for this week</p>
                     <p className="mt-1 text-[12px] text-[#94A3B8]">Add server statistics to populate the ranking.</p>
                   </div>
-                ) : weeklySendingLeaders.slice(0, 5).map((user, index) => (
+                ) : weeklySendingLeaders.map((user, index) => (
                   <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
                     <div className="flex items-center gap-2.5">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECFDF5] text-[10px] font-bold text-[#15803D]">
@@ -863,86 +919,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-
-      <div className="rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-        <div className="flex items-center justify-between px-5 py-4">
-          <div>
-            <h3 className="text-[15px] font-semibold text-[#111827]">Servers</h3>
-            <p className="mt-0.5 text-[12px] text-[#6B7280]">Recent server inventory across your providers.</p>
-          </div>
-          <Link href="/servers" className="text-[13px] font-medium text-[#4F46E5] hover:underline">
-            View All Servers
-          </Link>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px]">
-            <thead>
-              <tr className="border-t border-[#E5E7EB]">
-                {["Server", "Provider", "IP Addresses", "Type", "Region", "Status", "Monthly Cost", "Start Date", "Renewal Date", "Assigned To", "Actions"].map((header) => (
-                  <th key={header} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.03em] text-[#4B5563]">
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, index) => (
-                  <tr key={index} className="border-t border-[#F1F5F9]">
-                    {Array.from({ length: 11 }).map((__, cell) => (
-                      <td key={cell} className="px-4 py-3">
-                        <div className="h-4 rounded bg-gray-100 animate-pulse" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : dashboardServers.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-[13px] text-[#6B7280]">
-                    No servers available yet.
-                  </td>
-                </tr>
-              ) : (
-                dashboardServers.map((server) => (
-                  <tr key={server.id} className="border-t border-[#F1F5F9] hover:bg-[#F8FAFC]">
-                    <td className="px-4 py-3">
-                      <Link href="/servers" className="text-[13px] font-bold text-[#2563EB] hover:underline">
-                        {server.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-[13px] font-medium text-[#111827]">{server.providerName ?? "-"}</td>
-                    <td className="px-4 py-3 text-[13px] text-[#374151]">{server.ipCount ?? 0}</td>
-                    <td className="px-4 py-3 text-[13px] text-[#374151]">{server.plan ?? "Cloud"}</td>
-                    <td className="px-4 py-3 text-[13px] text-[#374151]">{server.location ?? "-"}</td>
-                    <td className="px-4 py-3"><StatusBadge value={server.status} /></td>
-                    <td className="px-4 py-3 text-[13px] font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</td>
-                    <td className="px-4 py-3 text-[13px] text-[#374151]">{shortDate(server.activationDate)}</td>
-                    <td className="px-4 py-3 text-[13px] text-[#374151]">{shortDate(server.expirationDate)}</td>
-                    <td className="px-4 py-3">
-                      {server.assignedUsers?.[0] ? (
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#EEF2FF] text-[10px] font-bold text-[#4F46E5]">
-                            {server.assignedUsers[0].name.charAt(0)}
-                          </span>
-                          <span className="text-[13px] text-[#374151]">{server.assignedUsers[0].name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[13px] text-[#9CA3AF]">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href="/servers" className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#6B7280] hover:bg-[#F1F5F9]">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
     </div>
   );
 }
