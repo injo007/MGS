@@ -604,7 +604,7 @@ export default function SendingPage() {
   };
 
   const tabs = warmupEnabled ? [BASE_TABS[0], BASE_TABS[1], WARMUP_TAB, BASE_TABS[2], BASE_TABS[3]] : BASE_TABS;
-  const tableColumnCount = warmupEnabled ? 15 : 14;
+  const tableColumnCount = warmupEnabled ? 14 : 13;
 
   const toggleRow = (id: string) => {
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -1064,11 +1064,11 @@ export default function SendingPage() {
             </div>
 
             <div className="hidden overflow-x-auto xl:block">
-              <table className="w-full min-w-[1280px]">
+              <table className="w-full min-w-[1180px]">
                 <thead>
                   <tr className="border-b border-[#E5E7EB]">
                     <th className="w-10 px-4 py-3"></th>
-                    {["Server", "Provider", "Daily Volume Limit", "Today Volume", "Success Rate", "Bounce %", "TSS04 %", "Complaints", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
+                    {["Server", "Provider", "Today Volume", "Success Rate", "Bounce %", "TSS04 %", "Complaints", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
                       <th key={header} className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.03em] text-[#4B5563]">{header}</th>
                     ))}
                   </tr>
@@ -1077,7 +1077,7 @@ export default function SendingPage() {
                   {loading ? (
                     Array.from({ length: 8 }).map((_, index) => (
                       <tr key={index} className="border-b border-[#F1F5F9]">
-                        {Array.from({ length: 15 }).map((__, cell) => <td key={cell} className="px-3 py-3"><div className="h-4 rounded bg-[#F1F5F9] animate-pulse" /></td>)}
+                        {Array.from({ length: tableColumnCount }).map((__, cell) => <td key={cell} className="px-3 py-3"><div className="h-4 rounded bg-[#F1F5F9] animate-pulse" /></td>)}
                       </tr>
                     ))
                   ) : paginated.length === 0 ? (
@@ -1100,32 +1100,6 @@ export default function SendingPage() {
                           </button>
                         </td>
                         <td className="px-3 py-3 text-[13px] font-medium text-[#111827]">{server.providerName ?? "-"}</td>
-                        <td className="px-3 py-3">
-                          <input
-                            value={limitDrafts[server.id] ?? ""}
-                            onChange={(e) => setLimitDrafts({ ...limitDrafts, [server.id]: e.target.value })}
-                            onBlur={(e) => saveLimit(server.id, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.currentTarget.blur();
-                              if (e.key === "Escape") {
-                                setLimitDrafts({ ...limitDrafts, [server.id]: server.dailySendLimit != null ? String(server.dailySendLimit) : "" });
-                                e.currentTarget.blur();
-                              }
-                            }}
-                            disabled={savingLimits[server.id]}
-                            className="h-[32px] w-[92px] rounded-[6px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
-                          />
-                          {limitDrafts[server.id] !== (server.dailySendLimit != null ? String(server.dailySendLimit) : "") && (
-                            <button
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => saveLimit(server.id, limitDrafts[server.id] ?? "")}
-                              disabled={savingLimits[server.id]}
-                              className="ml-1 h-[32px] rounded-[6px] bg-[#4F46E5] px-2 text-[11px] font-semibold text-white disabled:opacity-60"
-                            >
-                              {savingLimits[server.id] ? "..." : "Save"}
-                            </button>
-                          )}
-                        </td>
                         <td className="px-3 py-3">
                           <div className="w-[170px]">
                             <div className="flex items-center gap-1">
