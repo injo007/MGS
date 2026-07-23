@@ -249,7 +249,7 @@ export async function GET(request: Request) {
       })
       .from(outreachLogs)
       .leftJoin(users, eq(outreachLogs.sentById, users.id))
-      .where(eq(outreachLogs.channel, "email"))
+      .where(isNotNull(outreachLogs.sentById))
       .groupBy(outreachLogs.sentById, users.name, users.email)
       .orderBy(sql`count(distinct ${outreachLogs.providerId}) desc`, sql`count(*) desc`),
 

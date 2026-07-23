@@ -1,8 +1,8 @@
 import { after, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { servers, providers, auditLogs, ipAddresses, sendingLogs, serverUsers, users } from "@/db/schema";
-import { eq, ilike, desc, asc, and, count, sql, max, isNull } from "drizzle-orm";
+import { servers, providers, auditLogs, ipAddresses, sendingLogs, serverUsers, users, outreachLogs } from "@/db/schema";
+import { eq, ilike, desc, asc, and, count, sql, max, isNull, inArray } from "drizzle-orm";
 import { getIpIntelligenceCache, runIpIntelligenceForServers } from "@/lib/ip-intelligence";
 import { isAdmin, sessionUserId } from "@/lib/access-control";
 import { sendAuditTelegramAlert } from "@/lib/telegram";
@@ -48,6 +48,69 @@ function cleanIpAddressList(value: unknown) {
         .filter(Boolean)
     )
   );
+}
+
+function cleanManualContactUserId(value: unknown, fallbackUserId: string, admin: boolean) {
+  const requested = typeof value === "string" ? value.trim() : "";
+  if (!requested) return null;
+  return admin ? requested : fallbackUserId;
+}
+
+async function recordManualProviderContact({
+  providerId,
+  contactedByUserId,
+  actorUserId,
+  serverName,
+}: {
+  providerId: string;
+  contactedByUserId: string | null;
+  actorUserId: string;
+  serverName: string;
+}) {
+  if (!contactedByUserId) return;
+
+  const now = new Date();
+  const [provider] = await db
+    .select({
+      id: providers.id,
+      dateFirstContacted: providers.dateFirstContacted,
+    })
+    .from(providers)
+    .where(eq(providers.id, providerId))
+    .limit(1);
+
+  if (!provider) return;
+
+  const [created] = await db
+    .insert(outreachLogs)
+    .values({
+      providerId,
+      date: now,
+      channel: "contact_form",
+      sentById: contactedByUserId,
+      sendResult: "sent",
+      subject: "Website form contact",
+      message: `Manual website form contact recorded from server ${serverName}.`,
+    })
+    .returning();
+
+  await db
+    .update(providers)
+    .set({
+      contactStatus: "contacted",
+      dateFirstContacted: provider.dateFirstContacted || now,
+      lastContactDate: now,
+      updatedAt: now,
+    })
+    .where(eq(providers.id, providerId));
+
+  await db.insert(auditLogs).values({
+    userId: actorUserId,
+    action: "create",
+    entityType: "outreach",
+    entityId: created.id,
+    newValue: created,
+  });
 }
 
 async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null) {
@@ -260,6 +323,7 @@ export async function GET(request: Request) {
 
   // Fetch assigned users for each server
   const assignedUsersByServer: Record<string, { id: string; name: string; email: string }[]> = {};
+  const providerContactedUsersByProvider: Record<string, { id: string; name: string; email: string }[]> = {};
   if (serverIds.length > 0) {
     const assignments = await db
       .select({
@@ -275,6 +339,28 @@ export async function GET(request: Request) {
     for (const a of assignments) {
       if (!assignedUsersByServer[a.serverId]) assignedUsersByServer[a.serverId] = [];
       assignedUsersByServer[a.serverId].push({ id: a.userId, name: a.userName, email: a.userEmail });
+    }
+
+    const providerIds = Array.from(new Set(data.map((server) => server.providerId).filter(Boolean)));
+    if (providerIds.length > 0) {
+      const contactRows = await db
+        .select({
+          providerId: outreachLogs.providerId,
+          userId: users.id,
+          userName: users.name,
+          userEmail: users.email,
+          date: outreachLogs.date,
+        })
+        .from(outreachLogs)
+        .innerJoin(users, eq(users.id, outreachLogs.sentById))
+        .where(inArray(outreachLogs.providerId, providerIds))
+        .orderBy(desc(outreachLogs.date));
+
+      for (const row of contactRows) {
+        if (!providerContactedUsersByProvider[row.providerId]) providerContactedUsersByProvider[row.providerId] = [];
+        if (providerContactedUsersByProvider[row.providerId].some((user) => user.id === row.userId)) continue;
+        providerContactedUsersByProvider[row.providerId].push({ id: row.userId, name: row.userName, email: row.userEmail });
+      }
     }
   }
 
@@ -321,6 +407,7 @@ export async function GET(request: Request) {
   const enriched = data.map((s) => ({
     ...s,
     assignedUsers: assignedUsersByServer[s.id] || [],
+    providerContactedUsers: providerContactedUsersByProvider[s.providerId] || [],
     ips: ipsByServer[s.id] || [],
     dailyHistory: dayLabels.map((day) => ({
       date: day,
@@ -356,13 +443,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const { assignedUserIds, ipAddresses: ipAddressValues, ...serverData } = body;
+  const admin = isAdmin(session);
+  const { assignedUserIds, ipAddresses: ipAddressValues, manualContactedByUserId, ...serverData } = body;
   const cleanedServerData = cleanServerPayload(serverData);
   const cleanedIpAddresses = cleanIpAddressList(ipAddressValues);
   const requestedAssignedUserIds = Array.isArray(assignedUserIds) ? assignedUserIds : [];
-  const finalAssignedUserIds = isAdmin(session)
+  const finalAssignedUserIds = admin
     ? requestedAssignedUserIds
     : Array.from(new Set([...requestedAssignedUserIds, sessionUserId(session)]));
+  const manualContactUserId = cleanManualContactUserId(manualContactedByUserId, sessionUserId(session), admin);
 
   const [created] = await db
     .insert(servers)
@@ -401,6 +490,13 @@ export async function POST(request: Request) {
     .update(providers)
     .set({ assignedUserId: inferredProviderUserId, updatedAt: new Date() })
     .where(and(eq(providers.id, created.providerId), isNull(providers.assignedUserId)));
+
+  await recordManualProviderContact({
+    providerId: created.providerId,
+    contactedByUserId: manualContactUserId,
+    actorUserId: sessionUserId(session),
+    serverName: created.name,
+  });
 
   await db.insert(auditLogs).values({
     userId: session.user.id,

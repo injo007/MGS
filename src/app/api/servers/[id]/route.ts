@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { servers, auditLogs, serverUsers, users, sendingLogs, ipAddresses } from "@/db/schema";
+import { servers, auditLogs, serverUsers, users, sendingLogs, ipAddresses, providers, outreachLogs } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { enrichIpAddress, getIpIntelligenceCache } from "@/lib/ip-intelligence";
 import { canAccessServer, forbidden, isAdmin, sessionUserId } from "@/lib/access-control";
@@ -45,6 +45,69 @@ function cleanIpAddressList(value: unknown) {
         .filter(Boolean)
     )
   );
+}
+
+function cleanManualContactUserId(value: unknown, fallbackUserId: string, admin: boolean) {
+  const requested = typeof value === "string" ? value.trim() : "";
+  if (!requested) return null;
+  return admin ? requested : fallbackUserId;
+}
+
+async function recordManualProviderContact({
+  providerId,
+  contactedByUserId,
+  actorUserId,
+  serverName,
+}: {
+  providerId: string;
+  contactedByUserId: string | null;
+  actorUserId: string;
+  serverName: string;
+}) {
+  if (!contactedByUserId) return;
+
+  const now = new Date();
+  const [provider] = await db
+    .select({
+      id: providers.id,
+      dateFirstContacted: providers.dateFirstContacted,
+    })
+    .from(providers)
+    .where(eq(providers.id, providerId))
+    .limit(1);
+
+  if (!provider) return;
+
+  const [created] = await db
+    .insert(outreachLogs)
+    .values({
+      providerId,
+      date: now,
+      channel: "contact_form",
+      sentById: contactedByUserId,
+      sendResult: "sent",
+      subject: "Website form contact",
+      message: `Manual website form contact recorded from server ${serverName}.`,
+    })
+    .returning();
+
+  await db
+    .update(providers)
+    .set({
+      contactStatus: "contacted",
+      dateFirstContacted: provider.dateFirstContacted || now,
+      lastContactDate: now,
+      updatedAt: now,
+    })
+    .where(eq(providers.id, providerId));
+
+  await db.insert(auditLogs).values({
+    userId: actorUserId,
+    action: "create",
+    entityType: "outreach",
+    entityId: created.id,
+    newValue: created,
+  });
 }
 
 async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null, blacklistUserIds?: string | string[] | null) {
@@ -188,15 +251,17 @@ export async function PUT(
     return forbidden("You can only edit servers assigned to you.");
   }
 
-  const { assignedUserIds, ipAddresses: ipAddressValues, ...serverData } = body;
+  const admin = isAdmin(session);
+  const { assignedUserIds, ipAddresses: ipAddressValues, manualContactedByUserId, ...serverData } = body;
   const cleanedServerData = cleanServerPayload(serverData);
   const cleanedIpAddresses = cleanIpAddressList(ipAddressValues);
   const requestedAssignedUserIds = Array.isArray(assignedUserIds) ? assignedUserIds : null;
   const finalAssignedUserIds = requestedAssignedUserIds
-    ? isAdmin(session)
+    ? admin
       ? requestedAssignedUserIds
       : Array.from(new Set([...requestedAssignedUserIds, sessionUserId(session)]))
     : null;
+  const manualContactUserId = cleanManualContactUserId(manualContactedByUserId, sessionUserId(session), admin);
   let blacklistUserIds: string | string[] | null = finalAssignedUserIds;
   if (!blacklistUserIds) {
     const existingAssignments = await db
@@ -225,6 +290,13 @@ export async function PUT(
       await db.insert(serverUsers).values({ serverId: id, userId });
     }
   }
+
+  await recordManualProviderContact({
+    providerId: updated.providerId,
+    contactedByUserId: manualContactUserId,
+    actorUserId: sessionUserId(session),
+    serverName: updated.name,
+  });
 
   await db.insert(auditLogs).values({
     userId: session.user.id,

@@ -308,7 +308,7 @@ export async function GET(request: Request) {
         })
         .from(outreachLogs)
         .innerJoin(users, eq(users.id, outreachLogs.sentById))
-        .where(and(inArray(outreachLogs.providerId, providerIds), eq(outreachLogs.channel, "email")))
+        .where(inArray(outreachLogs.providerId, providerIds))
         .orderBy(desc(outreachLogs.date)),
       db.select({ id: users.id, name: users.name, email: users.email }).from(users),
       getImapConfigs(undefined, true),

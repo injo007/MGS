@@ -986,7 +986,7 @@ export default function DashboardPage() {
                           <div className="h-full rounded-full bg-[#0891B2]" style={{ width: `${Math.max(6, (user.providerCount / maxProviderContacts) * 100)}%` }} />
                         </div>
                         <p className="mt-1 truncate text-[11px] text-[#6B7280]">
-                          {compactNumber(user.emailCount)} emails · {user.source}
+                          {compactNumber(user.emailCount)} contacts · {user.source}
                         </p>
                       </div>
                       <div className="text-right">

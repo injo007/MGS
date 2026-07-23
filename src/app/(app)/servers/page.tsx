@@ -94,6 +94,7 @@ interface ServerRow {
   ipCount: number;
   ips?: ServerIp[];
   assignedUsers: AssignedUser[];
+  providerContactedUsers?: AssignedUser[];
 }
 
 interface ProviderOption {
@@ -318,6 +319,7 @@ function ServersPageContent() {
     ipAddresses: "",
     notes: "",
     assignedUserId: "",
+    contactedByUserId: "",
   });
 
   const parseIpAddresses = (value: string) =>
@@ -611,6 +613,7 @@ function ServersPageContent() {
       ipAddresses: "",
       notes: "",
       assignedUserId: "",
+      contactedByUserId: "",
     });
   };
 
@@ -639,6 +642,7 @@ function ServersPageContent() {
       ipAddresses: (server.ips || []).map((ip) => ip.address).join("\n"),
       notes: server.notes || "",
       assignedUserId: server.assignedUsers?.[0]?.id ?? "",
+      contactedByUserId: server.providerContactedUsers?.[0]?.id ?? "",
     });
     setShowCreate(true);
   };
@@ -730,6 +734,10 @@ function ServersPageContent() {
     setSaving(true);
     try {
       const url = editingServer ? `/api/servers/${editingServer.id}` : "/api/servers";
+      const existingContactedByUserId = editingServer?.providerContactedUsers?.[0]?.id ?? "";
+      const manualContactedByUserId = form.contactedByUserId && form.contactedByUserId !== existingContactedByUserId
+        ? form.contactedByUserId
+        : null;
       const res = await fetch(url, {
         method: editingServer ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -750,6 +758,7 @@ function ServersPageContent() {
           ipAddresses: parseIpAddresses(form.ipAddresses),
           notes: form.notes || null,
           assignedUserIds: form.assignedUserId ? [form.assignedUserId] : [],
+          manualContactedByUserId,
         }),
       });
       if (!res.ok) throw new Error(editingServer ? "Failed to update server" : "Failed to create server");
@@ -1245,7 +1254,7 @@ function ServersPageContent() {
             </label>
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
               Provider
-              <select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]">
+              <select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value, contactedByUserId: "" })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]">
                 <option value="">Select provider</option>
                 {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
               </select>
@@ -1320,6 +1329,16 @@ function ServersPageContent() {
                 <option value="">Unassigned</option>
                 {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
               </select>
+            </label>
+            <label className="col-span-2 space-y-1.5 text-[13px] font-medium text-[#374151]">
+              Contacted By
+              <select value={form.contactedByUserId} onChange={(e) => setForm({ ...form, contactedByUserId: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]">
+                <option value="">{editingServer?.providerContactedUsers?.length ? "Keep current contacted user" : "Not contacted manually"}</option>
+                {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              </select>
+              <span className="block text-[11px] font-normal text-[#6B7280]">
+                Use this when the provider was contacted through a website form or ticket instead of email. Saving a changed value records a manual provider conversation.
+              </span>
             </label>
             <label className="col-span-2 space-y-1.5 text-[13px] font-medium text-[#374151]">
               Notes
