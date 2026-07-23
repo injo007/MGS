@@ -526,7 +526,7 @@ export default function ProvidersPage() {
                   Decision
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
-                  Port / PTR
+                  Port 25
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Note
@@ -653,12 +653,9 @@ export default function ProvidersPage() {
                       <StatusBadge value={provider.decision} />
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="space-y-1 text-[11px]">
+                      <div className="text-[11px]">
                         <span className={`inline-flex rounded-[5px] px-2 py-0.5 font-semibold ${provider.port25Status === "available" ? "bg-[#ECFDF5] text-[#15803D]" : provider.port25Status === "blocked" ? "bg-[#FEF2F2] text-[#DC2626]" : "bg-[#F3F4F6] text-[#4B5563]"}`}>
                           P25 {provider.port25Status || "unknown"}
-                        </span>
-                        <span className={`ml-1 inline-flex rounded-[5px] px-2 py-0.5 font-semibold ${provider.ptrStatus === "configured" ? "bg-[#ECFDF5] text-[#15803D]" : "bg-[#F3F4F6] text-[#4B5563]"}`}>
-                          PTR {provider.ptrStatus || "unknown"}
                         </span>
                       </div>
                     </td>

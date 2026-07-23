@@ -147,6 +147,8 @@ export default function UsersPage() {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || "Failed to update user");
         }
+        const updated = await res.json();
+        window.dispatchEvent(new CustomEvent("cloudops:user-updated", { detail: updated }));
         toast.success("User updated");
       } else {
         const res = await fetch("/api/users", {

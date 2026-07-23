@@ -60,6 +60,14 @@ interface UrgentTask {
   createdAt: string;
 }
 
+interface CurrentUserProfile {
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+  roleName: string | null;
+}
+
 function timeAgo(dateStr: string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
@@ -175,11 +183,40 @@ export function TopNav({
     }
   };
 
-  const userName = session?.user?.name ?? "Michael Scott";
-  const userEmail = session?.user?.email ?? "";
-  const userImage = session?.user?.image || "";
-  const userRole = (session?.user as Record<string, unknown>)?.roleName as string | undefined;
-  const currentUserId = (session?.user as Record<string, unknown>)?.id as string | undefined;
+  const sessionUser = session?.user as
+    | (Record<string, unknown> & { name?: string | null; email?: string | null; image?: string | null })
+    | undefined;
+  const sessionUserId = sessionUser?.id as string | undefined;
+  const [currentUserProfile, setCurrentUserProfile] = useState<CurrentUserProfile | null>(null);
+
+  useEffect(() => {
+    if (!sessionUserId) return;
+    let cancelled = false;
+
+    fetch("/api/users/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((profile: CurrentUserProfile | null) => {
+        if (!cancelled && profile) setCurrentUserProfile(profile);
+      })
+      .catch(() => {});
+
+    const handleUserUpdated = (event: Event) => {
+      const profile = (event as CustomEvent<CurrentUserProfile>).detail;
+      if (profile?.id === sessionUserId) setCurrentUserProfile(profile);
+    };
+
+    window.addEventListener("cloudops:user-updated", handleUserUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("cloudops:user-updated", handleUserUpdated);
+    };
+  }, [sessionUserId]);
+
+  const userName = currentUserProfile?.name || session?.user?.name || "Michael Scott";
+  const userEmail = currentUserProfile?.email || session?.user?.email || "";
+  const userImage = currentUserProfile?.image || session?.user?.image || "";
+  const userRole = currentUserProfile?.roleName || (sessionUser?.roleName as string | undefined);
+  const currentUserId = currentUserProfile?.id || sessionUserId;
   const initials = userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 
   const segments = pathname.split("/").filter(Boolean);
