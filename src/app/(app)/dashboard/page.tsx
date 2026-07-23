@@ -589,7 +589,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[1.35fr_1fr]">
+      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
         {/* Providers Requiring Action */}
         <div className="bg-white rounded-[10px] border border-[#E5E7EB]">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -728,13 +728,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Servers */}
-        <div className="flex h-full flex-col rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
+        <div className="flex h-full min-w-0 flex-col rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h3 className="text-[15px] font-semibold text-[#111827]">Servers</h3>
               <p className="mt-0.5 text-[12px] text-[#6B7280]">Recent server inventory across your providers.</p>
             </div>
-            <Link href="/servers" className="text-[13px] font-medium text-[#4F46E5] hover:underline">
+            <Link href="/servers" className="shrink-0 text-[13px] font-medium text-[#4F46E5] hover:underline">
               View All Servers
             </Link>
           </div>
@@ -753,45 +753,48 @@ export default function DashboardPage() {
                 No servers available yet.
               </div>
             ) : (
-              dashboardServers.map((server) => (
-                <div key={server.id} className="border-b border-[#F1F5F9] px-5 py-3.5 last:border-b-0 hover:bg-[#F8FAFC]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <Link href="/servers" className="truncate text-[13px] font-bold text-[#2563EB] hover:underline">
-                        {server.name}
-                      </Link>
-                      <p className="mt-1 truncate text-[12px] font-medium text-[#374151]">
-                        {server.providerName ?? "No provider"} · {server.location ?? "No region"}
-                      </p>
+              <div className="divide-y divide-[#F1F5F9]">
+                {dashboardServers.map((server) => (
+                  <div key={server.id} className="px-5 py-3.5 hover:bg-[#F8FAFC]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link href="/servers" className="block truncate text-[13px] font-bold text-[#2563EB] hover:underline">
+                          {server.name}
+                        </Link>
+                        <p className="mt-1 truncate text-[12px] font-medium text-[#374151]">
+                          {server.providerName ?? "No provider"}
+                        </p>
+                        <p className="mt-0.5 truncate text-[11px] text-[#6B7280]">{server.location ?? "No region"}</p>
+                      </div>
+                      <StatusBadge value={server.status} />
                     </div>
-                    <StatusBadge value={server.status} />
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
+                      <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] px-2 py-1.5">
+                        <p className="text-[#9CA3AF]">Cost</p>
+                        <p className="mt-0.5 font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</p>
+                      </div>
+                      <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] px-2 py-1.5">
+                        <p className="text-[#9CA3AF]">IPs</p>
+                        <p className="mt-0.5 font-semibold text-[#111827]">{server.ipCount ?? 0}</p>
+                      </div>
+                      <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] px-2 py-1.5 max-sm:col-span-2">
+                        <p className="text-[#9CA3AF]">Assigned</p>
+                        <p className="mt-0.5 truncate font-semibold text-[#111827]">
+                          {server.assignedUsers?.[0]?.name ?? "-"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                    <div>
-                      <p className="text-[#9CA3AF]">Cost</p>
-                      <p className="mt-0.5 font-semibold text-[#111827]">{money(server.monthlyCost, server.currency ?? "USD")}</p>
-                    </div>
-                    <div>
-                      <p className="text-[#9CA3AF]">IPs</p>
-                      <p className="mt-0.5 font-semibold text-[#111827]">{server.ipCount ?? 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-[#9CA3AF]">Assigned</p>
-                      <p className="mt-0.5 truncate font-semibold text-[#111827]">
-                        {server.assignedUsers?.[0]?.name ?? "-"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
 
         {/* User Performance Rankings */}
-        <div className="xl:col-span-2 flex h-full flex-col rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
+        <div className="xl:col-span-2 flex min-w-0 flex-col rounded-[10px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Trophy className="h-4 w-4 text-[#4F46E5]" />
                 <h3 className="text-[15px] font-semibold text-[#111827]">User Performance Rankings</h3>
@@ -800,12 +803,16 @@ export default function DashboardPage() {
                 Provider contacts from saved email conversations and sends from this week.
               </p>
             </div>
-            <span className="shrink-0 rounded-[999px] border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-[#475569]">
+            <span className="w-fit shrink-0 rounded-[999px] border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-[#475569]">
               Week of {stats?.userRankings?.weekStart ? new Date(stats.userRankings.weekStart).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "now"}
             </span>
           </div>
 
-          <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Visible Users</p>
+              <p className="mt-1 text-[22px] font-bold leading-none text-[#111827]">{loading ? "..." : compactNumber(Math.max(providerContactLeaders.length, weeklySendingLeaders.length))}</p>
+            </div>
             <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Ranked Providers</p>
               <p className="mt-1 text-[22px] font-bold leading-none text-[#111827]">{loading ? "..." : compactNumber(totalRankedProviders)}</p>
@@ -814,11 +821,19 @@ export default function DashboardPage() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Weekly Sends</p>
               <p className="mt-1 text-[22px] font-bold leading-none text-[#111827]">{loading ? "..." : compactNumber(totalRankedSends)}</p>
             </div>
+            <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Inbox Sync</p>
+              <p className="mt-1 truncate text-[13px] font-semibold text-[#111827]">
+                {stats?.userRankings?.lastInboxSync
+                  ? new Date(stats.userRankings.lastInboxSync).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                  : "Not synced"}
+              </p>
+            </div>
           </div>
 
           <div className="grid flex-1 content-start gap-4 xl:grid-cols-2">
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center justify-between">
+            <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-[#0891B2]" />
                   <p className="text-[13px] font-semibold text-[#111827]">Provider Contacts</p>
@@ -842,7 +857,7 @@ export default function DashboardPage() {
                   </div>
                 ) : providerContactLeaders.map((user, index) => (
                   <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                    <div className="flex items-center gap-2.5">
+                    <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2.5">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECFEFF] text-[10px] font-bold text-[#0891B2]">
                         {index + 1}
                       </span>
@@ -850,16 +865,17 @@ export default function DashboardPage() {
                         {initials(user.userName)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-[13px] font-semibold text-[#111827]">{user.userName}</p>
-                          <p className="shrink-0 text-[13px] font-bold text-[#111827]">{user.providerCount}</p>
-                        </div>
+                        <p className="truncate text-[13px] font-semibold text-[#111827]">{user.userName}</p>
                         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E5E7EB]">
                           <div className="h-full rounded-full bg-[#0891B2]" style={{ width: `${Math.max(6, (user.providerCount / maxProviderContacts) * 100)}%` }} />
                         </div>
-                        <p className="mt-1 text-[11px] text-[#6B7280]">
+                        <p className="mt-1 truncate text-[11px] text-[#6B7280]">
                           {compactNumber(user.emailCount)} emails · {user.source}
                         </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[14px] font-bold text-[#111827]">{user.providerCount}</p>
+                        <p className="text-[10px] uppercase tracking-[0.03em] text-[#94A3B8]">providers</p>
                       </div>
                     </div>
                   </div>
@@ -867,8 +883,8 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center justify-between">
+            <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Send className="h-4 w-4 text-[#16A34A]" />
                   <p className="text-[13px] font-semibold text-[#111827]">Weekly Sending</p>
@@ -892,7 +908,7 @@ export default function DashboardPage() {
                   </div>
                 ) : weeklySendingLeaders.map((user, index) => (
                   <div key={user.userId} className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                    <div className="flex items-center gap-2.5">
+                    <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2.5">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECFDF5] text-[10px] font-bold text-[#15803D]">
                         {index + 1}
                       </span>
@@ -900,16 +916,17 @@ export default function DashboardPage() {
                         {initials(user.userName)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-[13px] font-semibold text-[#111827]">{user.userName}</p>
-                          <p className="shrink-0 text-[13px] font-bold text-[#111827]">{compactNumber(user.totalSends)}</p>
-                        </div>
+                        <p className="truncate text-[13px] font-semibold text-[#111827]">{user.userName}</p>
                         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E5E7EB]">
                           <div className="h-full rounded-full bg-[#16A34A]" style={{ width: `${Math.max(6, (user.totalSends / maxWeeklySends) * 100)}%` }} />
                         </div>
-                        <p className="mt-1 text-[11px] text-[#6B7280]">
+                        <p className="mt-1 truncate text-[11px] text-[#6B7280]">
                           {user.serverCount} server{user.serverCount === 1 ? "" : "s"} · {user.daysActive} active day{user.daysActive === 1 ? "" : "s"}
                         </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[14px] font-bold text-[#111827]">{compactNumber(user.totalSends)}</p>
+                        <p className="text-[10px] uppercase tracking-[0.03em] text-[#94A3B8]">sent</p>
                       </div>
                     </div>
                   </div>
