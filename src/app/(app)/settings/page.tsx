@@ -67,6 +67,10 @@ interface SettingsData {
   smtp_password?: string;
   smtp_from_email?: string;
   smtp_from_name?: string;
+  system_email_provider?: "smtp" | "resend";
+  resend_api_key?: string;
+  resend_from_email?: string;
+  resend_from_name?: string;
   mxtoolbox_api_key?: string;
   mxtoolbox_accounts?: BlacklistAccount[];
   hetrixtools_accounts?: BlacklistAccount[];
@@ -97,7 +101,7 @@ const TABS = [
   { id: "security", label: "Security", icon: Shield },
   { id: "ai", label: "AI Agent", icon: Bot },
   { id: "telegram", label: "Telegram Bot", icon: MessageSquare },
-  { id: "smtp", label: "SMTP", icon: Mail },
+  { id: "smtp", label: "SMTP / Resend", icon: Mail },
   { id: "ip", label: "IP Intelligence", icon: Shield },
   { id: "backup", label: "Backup", icon: Download },
 ] as const;
@@ -127,12 +131,14 @@ export default function SettingsPage() {
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [showTelegramToken, setShowTelegramToken] = useState(false);
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [showResendApiKey, setShowResendApiKey] = useState(false);
   const [showMxToolboxKey, setShowMxToolboxKey] = useState(false);
   const [showHetrixToolsKey, setShowHetrixToolsKey] = useState(false);
 
   const [inputOpenRouterKey, setInputOpenRouterKey] = useState("");
   const [inputTelegramToken, setInputTelegramToken] = useState("");
   const [inputSmtpPassword, setInputSmtpPassword] = useState("");
+  const [inputResendApiKey, setInputResendApiKey] = useState("");
   const [inputMxToolboxKey, setInputMxToolboxKey] = useState("");
   const [inputMxToolboxLabel, setInputMxToolboxLabel] = useState("");
   const [inputMxToolboxUserId, setInputMxToolboxUserId] = useState("");
@@ -182,6 +188,10 @@ export default function SettingsPage() {
         smtp_password: json.smtp_password || "",
         smtp_from_email: json.smtp_from_email || "",
         smtp_from_name: json.smtp_from_name || "ServerOps CRM",
+        system_email_provider: json.system_email_provider === "resend" ? "resend" : "smtp",
+        resend_api_key: json.resend_api_key || "",
+        resend_from_email: json.resend_from_email || "",
+        resend_from_name: json.resend_from_name || "ServerOps CRM",
         mxtoolbox_api_key: json.mxtoolbox_api_key || "",
         mxtoolbox_accounts: Array.isArray(json.mxtoolbox_accounts) ? json.mxtoolbox_accounts : [],
         hetrixtools_accounts: Array.isArray(json.hetrixtools_accounts) ? json.hetrixtools_accounts : [],
@@ -333,6 +343,7 @@ export default function SettingsPage() {
         break;
       case "smtp":
         setSaving = setSavingSmtp;
+        payload.system_email_provider = settings.system_email_provider || "smtp";
         payload.smtp_host = settings.smtp_host;
         payload.smtp_port = settings.smtp_port;
         payload.smtp_secure = settings.smtp_secure;
@@ -341,6 +352,11 @@ export default function SettingsPage() {
         payload.smtp_from_name = settings.smtp_from_name;
         if (inputSmtpPassword) {
           payload.smtp_password = inputSmtpPassword;
+        }
+        payload.resend_from_email = settings.resend_from_email;
+        payload.resend_from_name = settings.resend_from_name;
+        if (inputResendApiKey) {
+          payload.resend_api_key = inputResendApiKey;
         }
         break;
       case "ip":
@@ -395,6 +411,10 @@ export default function SettingsPage() {
         setInputSmtpPassword("");
         setShowSmtpPassword(false);
       }
+      if (section === "smtp" && inputResendApiKey) {
+        setInputResendApiKey("");
+        setShowResendApiKey(false);
+      }
       if (section === "ip" && inputMxToolboxKey) {
         clearMxToolboxDraft();
       }
@@ -408,7 +428,7 @@ export default function SettingsPage() {
           : section === "telegram" && payload.telegram_bot_token
           ? `Token saved: ${maskToken(payload.telegram_bot_token)}`
           : section === "smtp"
-          ? "SMTP settings saved for system emails."
+          ? "System email provider settings saved."
           : section === "ip"
           ? `${payload.hetrixtools_accounts?.length || 0} HetrixTools and ${payload.mxtoolbox_accounts?.length || 0} MxToolbox accounts saved.`
           : `${section.charAt(0).toUpperCase() + section.slice(1)} settings updated successfully.`,
@@ -991,16 +1011,43 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* SMTP Tab */}
+          {/* SMTP / Resend Tab */}
           {activeTab === "smtp" && (
             <div className="bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
               <div className="px-5 py-4 border-b border-[#E5E7EB]">
                 <h3 className="text-[13px] font-semibold text-[#111827] flex items-center gap-2">
-                  <Mail className="h-4 w-4" /> SMTP
+                  <Mail className="h-4 w-4" /> SMTP / Resend
                 </h3>
                 <p className="text-[13px] text-[#6B7280] mt-0.5">Configure outgoing system email for password and account notifications</p>
               </div>
               <div className="p-5 space-y-4">
+                <div className="rounded-[7px] border border-[#E5E7EB] bg-[#F9FAFB] p-3">
+                  <label className="text-[13px] font-semibold text-[#111827]">System email provider</label>
+                  <div className="mt-3 grid grid-cols-2 gap-2 max-sm:grid-cols-1">
+                    {[
+                      { value: "smtp", label: "SMTP", description: "Use your existing SMTP host and credentials." },
+                      { value: "resend", label: "Resend API", description: "Use Resend for outgoing system email." },
+                    ].map((option) => {
+                      const active = (settings.system_email_provider || "smtp") === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => update("system_email_provider", option.value)}
+                          className={`rounded-[7px] border px-3 py-2 text-left transition-colors ${
+                            active
+                              ? "border-[#4F46E5] bg-white text-[#111827] shadow-sm"
+                              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#C7D2FE]"
+                          }`}
+                        >
+                          <span className="block text-[13px] font-semibold">{option.label}</span>
+                          <span className="mt-0.5 block text-[12px] leading-5">{option.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
                   <div className="space-y-2">
                     <label className="text-[13px] font-medium text-[#374151]">SMTP Host</label>
@@ -1088,13 +1135,65 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                <div className="rounded-[7px] border border-[#E5E7EB] p-4 space-y-4">
+                  <div>
+                    <h4 className="text-[13px] font-semibold text-[#111827]">Resend API</h4>
+                    <p className="mt-1 text-[13px] text-[#6B7280]">
+                      Optional provider for outgoing system email. Select Resend API above to use these values.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+                    <div className="space-y-2">
+                      <label className="text-[13px] font-medium text-[#374151]">Resend API Key</label>
+                      <div className="relative">
+                        <input
+                          type={showResendApiKey ? "text" : "password"}
+                          className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 pr-9 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                          placeholder={settings.resend_api_key ? "re_************" : "re_..."}
+                          value={inputResendApiKey}
+                          onChange={(e) => setInputResendApiKey(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#111827]"
+                          onClick={() => setShowResendApiKey(!showResendApiKey)}
+                        >
+                          {showResendApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {settings.resend_api_key && (
+                        <p className="text-[13px] text-[#6B7280]">Current API key saved</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[13px] font-medium text-[#374151]">Resend From Email</label>
+                      <input
+                        type="email"
+                        className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                        placeholder="no-reply@example.com"
+                        value={settings.resend_from_email || ""}
+                        onChange={(e) => update("resend_from_email", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[13px] font-medium text-[#374151]">Resend From Name</label>
+                    <input
+                      className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5]"
+                      placeholder="ServerOps CRM"
+                      value={settings.resend_from_name || ""}
+                      onChange={(e) => update("resend_from_name", e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div className="rounded-[7px] bg-[#F9FAFB] border border-[#E5E7EB] p-3 text-[13px] text-[#6B7280] leading-relaxed">
-                  These SMTP settings are for outgoing system email such as password, username, and account-change notifications. Provider conversation IMAP accounts are configured from the Email Inbox page.
+                  These settings are for outgoing system email such as password, username, and account-change notifications. Provider conversation IMAP accounts are configured from the Email Inbox page.
                 </div>
 
                 <button onClick={() => handleSave("smtp")} disabled={savingSmtp} className="h-[34px] rounded-[7px] bg-[#4F46E5] hover:bg-[#4338CA] px-3.5 text-[13px] font-medium text-white transition-colors disabled:opacity-50">
                   {savingSmtp ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin inline" /> : <Save className="h-3.5 w-3.5 mr-2 inline" />}
-                  {savingSmtp ? "Saving..." : "Save SMTP Settings"}
+                  {savingSmtp ? "Saving..." : "Save Email Settings"}
                 </button>
               </div>
             </div>

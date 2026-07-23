@@ -222,7 +222,7 @@ export function TopNav({
         <ChevronRight className="h-4 w-4 shrink-0" />
       </Link>
     )}
-    <header className="h-[60px] border-b border-[#E5E7EB] bg-white flex items-center px-5 gap-4 shrink-0 z-30">
+    <header className="h-[60px] border-b border-[#E5E7EB] bg-white flex items-center px-3 gap-2 shrink-0 z-30 sm:px-5 sm:gap-4">
       <Button
         variant="ghost"
         size="icon"
@@ -233,7 +233,7 @@ export function TopNav({
       </Button>
 
       {/* Breadcrumbs */}
-      <nav className="flex items-center gap-1.5 text-sm">
+      <nav className="hidden min-w-0 items-center gap-1.5 text-sm sm:flex">
         {breadcrumbs.map((crumb) => (
           <span key={crumb.href} className="flex items-center gap-1.5">
             {crumb.isLast ? (
@@ -253,7 +253,7 @@ export function TopNav({
       <div className="flex-1" />
 
       {/* Search */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
         <button className="flex items-center gap-2 h-[38px] w-[350px] max-md:w-[200px] max-sm:w-[38px] max-sm:px-0 max-sm:justify-center rounded-[7px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-[13px] text-[#9CA3AF] hover:bg-[#F1F5F9] transition-colors cursor-pointer">
           <Search className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate max-sm:hidden">Search providers, contacts, servers...</span>
@@ -262,7 +262,7 @@ export function TopNav({
           </kbd>
         </button>
 
-        <div className="w-px h-5 bg-[#E5E7EB] mx-1 max-sm:mx-0" />
+        <div className="hidden w-px h-5 bg-[#E5E7EB] mx-1 sm:block" />
 
         {/* Add New Button */}
         <DropdownMenu>
@@ -285,7 +285,7 @@ export function TopNav({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="w-px h-5 bg-[#E5E7EB] mx-1" />
+        <div className="hidden w-px h-5 bg-[#E5E7EB] mx-1 sm:block" />
 
         {/* Notifications */}
         <Popover>
@@ -404,7 +404,7 @@ export function TopNav({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="w-px h-5 bg-[#E5E7EB] mx-1" />
+        <div className="hidden w-px h-5 bg-[#E5E7EB] mx-1 sm:block" />
 
         {/* User Profile */}
         <DropdownMenu>

@@ -639,7 +639,60 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="space-y-2 border-t border-[#E5E7EB] p-3 lg:hidden">
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="rounded-[8px] border border-[#F1F5F9] bg-white p-3">
+                  <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
+                  <div className="mt-2 h-3 w-full animate-pulse rounded bg-gray-100" />
+                </div>
+              ))
+            ) : actionProviders.length === 0 ? (
+              <div className="rounded-[8px] border border-[#F1F5F9] bg-[#F8FAFC] p-6 text-center text-[13px] text-[#6B7280]">
+                No providers currently require action.
+              </div>
+            ) : (
+              actionProviders.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/providers/${p.id}`}
+                  className="block rounded-[8px] border border-[#F1F5F9] bg-white p-3 transition-colors hover:border-[#C7D2FE]"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded bg-[#EEF2FF] text-[10px] font-semibold text-[#4F46E5]">
+                      {p.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <p className="truncate text-[13px] font-semibold text-[#111827]">{p.name}</p>
+                        <StatusBadge value={displayProviderStatus(p)} />
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[12px] text-[#6B7280]">{providerNote(p)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] p-2">
+                      <p className="font-semibold uppercase tracking-[0.03em] text-[#64748B]">Owned</p>
+                      <p className="mt-1 font-bold text-[#111827]">{p.assignedUserId ? "Yes" : "No"}</p>
+                    </div>
+                    <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] p-2">
+                      <p className="font-semibold uppercase tracking-[0.03em] text-[#64748B]">Assigned</p>
+                      <p className="mt-1 truncate font-bold text-[#111827]">{p.assignedUserName || "-"}</p>
+                    </div>
+                    <div className="min-w-0 rounded-[7px] bg-[#F8FAFC] p-2">
+                      <p className="font-semibold uppercase tracking-[0.03em] text-[#64748B]">Contact</p>
+                      <p className="mt-1 truncate font-bold text-[#111827]">
+                        {p.lastContactDate
+                          ? new Date(p.lastContactDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                          : "Never"}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+          <div className="hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[860px]">
               <thead>
                 <tr className="border-t border-[#E5E7EB]">
@@ -788,7 +841,7 @@ export default function DashboardPage() {
             ) : (
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] min-[2000px]:grid-cols-1">
                 <div className="min-w-0 space-y-4">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
                       <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Total</p>
                       <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{totalDashboardServers}</p>
@@ -871,7 +924,7 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-4">
             <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Visible Users</p>
               <p className="mt-1 text-[22px] font-bold leading-none text-[#111827]">{loading ? "..." : compactNumber(Math.max(providerContactLeaders.length, weeklySendingLeaders.length))}</p>
@@ -894,7 +947,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid flex-1 content-start gap-4 xl:grid-cols-2">
+          <div className="grid flex-1 content-start gap-4 2xl:grid-cols-2">
             <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-3">
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">

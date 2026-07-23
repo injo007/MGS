@@ -55,8 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-black/40"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="relative z-50 h-full">
-            <Sidebar collapsed={false} />
+          <div className="relative z-50 h-full w-[min(86vw,280px)]">
+            <Sidebar collapsed={false} onNavigate={() => setMobileOpen(false)} />
           </div>
         </div>
       )}
@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           sidebarCollapsed={mounted ? collapsed : false}
         />
         <main className="flex-1 overflow-y-auto">
-          <div className="px-4 py-5 sm:px-6">{children}</div>
+          <div className="min-w-0 px-3 py-4 sm:px-6 sm:py-5">{children}</div>
         </main>
       </div>
       <LiveLogPanel />

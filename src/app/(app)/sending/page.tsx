@@ -857,7 +857,7 @@ export default function SendingPage() {
           </div>
 
           <div className="rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-            <div className="flex border-b border-[#E5E7EB] px-4">
+            <div className="flex overflow-x-auto border-b border-[#E5E7EB] px-4">
               {tabs.map((tab) => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`relative flex h-[46px] items-center gap-2 px-3 text-[13px] font-semibold ${activeTab === tab.key ? "text-[#4F46E5]" : "text-[#4B5563]"}`}>
                   {tab.label}
@@ -868,39 +868,39 @@ export default function SendingPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E7EB] p-4">
-              <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+              <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} className="h-[34px] min-w-[150px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:w-full">
                 <option value="all">All Providers</option>
                 {providers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[34px] min-w-[140px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
                 <option value="all">All Statuses</option>
                 <option value="active">Active</option>
                 {warmupEnabled && <option value="warmup">Warmup</option>}
                 <option value="restricted">Restricted</option>
                 <option value="paused">Paused</option>
               </select>
-              <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+              <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-[34px] min-w-[130px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
                 <option value="all">All Regions</option>
                 {regions.map((region) => <option key={region} value={region}>{region}</option>)}
               </select>
               {warmupEnabled && (
-                <select value={warmupFilter} onChange={(e) => setWarmupFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+                <select value={warmupFilter} onChange={(e) => setWarmupFilter(e.target.value)} className="h-[34px] min-w-[150px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
                   <option value="all">All Warmup Stages</option>
                   {["Stage 1", "Stage 2", "Stage 3", "Mature", "Paused"].map((stage) => <option key={stage} value={stage}>{stage}</option>)}
                 </select>
               )}
-              <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+              <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="h-[34px] min-w-[140px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
                 <option value="all">All Assigned</option>
                 {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
               </select>
-              <div className="relative min-w-[220px] flex-1">
+              <div className="relative min-w-[220px] flex-1 max-sm:min-w-full">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search servers..." className="h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white pl-9 pr-3 text-[12px] text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15" />
               </div>
               <button className="inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]">
                 <Filter className="h-3.5 w-3.5" /> Filters
               </button>
-              <Link href="/imports" className="ml-auto inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]">
+              <Link href="/imports" className="ml-auto inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB] max-sm:ml-0">
                 <Upload className="h-3.5 w-3.5" /> Import
               </Link>
               <Link href="/api/export?entity=sending_logs" className="inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]">
@@ -908,7 +908,7 @@ export default function SendingPage() {
               </Link>
             </div>
 
-            <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E7EB] px-4 py-3">
               <button onClick={togglePage} className="inline-flex items-center gap-2 text-[12px] font-medium text-[#374151]">
                 {paginated.length > 0 && paginated.every((server) => selected.includes(server.id)) ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
                 {selected.length} selected
@@ -939,7 +939,131 @@ export default function SendingPage() {
               </div>
             )}
 
-            <div className="overflow-x-auto">
+            <div className="space-y-3 p-4 xl:hidden">
+              {loading ? (
+                Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
+                    <div className="h-5 w-36 animate-pulse rounded bg-gray-100" />
+                    <div className="mt-3 h-4 w-full animate-pulse rounded bg-gray-100" />
+                  </div>
+                ))
+              ) : paginated.length === 0 ? (
+                <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-6 text-center text-[13px] text-[#6B7280]">No tracked servers match the current filters.</div>
+              ) : (
+                paginated.map((server) => (
+                  <article key={server.id} className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
+                    <div className="flex items-start gap-3">
+                      <button onClick={() => toggleRow(server.id)} className="mt-0.5">
+                        {selected.includes(server.id) ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
+                      </button>
+                      <button onClick={() => setDrawerServerId(server.id)} className="min-w-0 flex-1 text-left">
+                        <p className="truncate text-[14px] font-bold text-[#2563EB]">{server.name}</p>
+                        <p className="mt-0.5 truncate text-[12px] text-[#6B7280]">{server.providerName ?? "-"} · {server.location ?? "-"}</p>
+                      </button>
+                      <StatusBadge value={server.status} label={server.status === "restricted" ? "Restricted" : server.status === "warmup" ? "Warmup" : server.status === "active" ? "Active" : "Paused"} />
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+                      <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Daily Limit</p>
+                        <input
+                          value={limitDrafts[server.id] ?? ""}
+                          onChange={(e) => setLimitDrafts({ ...limitDrafts, [server.id]: e.target.value })}
+                          onBlur={(e) => saveLimit(server.id, e.target.value)}
+                          className="mt-1 h-[30px] w-full rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]"
+                        />
+                      </div>
+                      <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Today Volume</p>
+                        <input
+                          value={sentDrafts[server.id] ?? "0"}
+                          onChange={(e) => setSentDrafts({ ...sentDrafts, [server.id]: e.target.value })}
+                          onBlur={(e) => saveSentToday(server, e.target.value)}
+                          className="mt-1 h-[30px] w-full rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]"
+                        />
+                      </div>
+                      <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Success</p>
+                        <p className="mt-1 font-semibold text-[#15803D]">{pct(server.delivered, server.totalSends, 1)}%</p>
+                      </div>
+                      <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Issues</p>
+                        <p className="mt-1 font-semibold text-[#111827]">B {server.bounceRate.toFixed(1)}% · T {server.ts04Rate.toFixed(1)}%</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[12px]">
+                      <span className="text-[#6B7280]">Assigned: <span className="font-semibold text-[#111827]">{server.assignedUsers?.[0]?.name || "-"}</span></span>
+                      <button onClick={() => setDrawerServerId(server.id)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#C7D2FE] px-2.5 font-semibold text-[#4F46E5]">
+                        <Settings2 className="h-3.5 w-3.5" /> Edit Rules
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+
+              {selectedServers.length > 0 && (
+                <div className="rounded-[10px] border border-[#DCE3F0] bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
+                      <p className="mt-0.5 text-[12px] text-[#6B7280]">
+                        {selectedServers.length === 1 ? selectedServers[0].name : `${selectedServers.length} selected servers`}
+                      </p>
+                    </div>
+                    <select value={statsRange} onChange={(event) => setStatsRange(event.target.value as StatsRangeKey)} className="h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]">
+                      <option value="week">This week</option>
+                      <option value="currentMonth">Current month</option>
+                      <option value="lastMonth">Last month</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+                  {statsRange === "custom" && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <input type="date" value={statsCustomRange.startDate} onChange={(event) => setStatsCustomRange((current) => ({ ...current, startDate: event.target.value }))} className="h-[32px] rounded-[7px] border border-[#E5E7EB] px-2 text-[12px]" />
+                      <input type="date" value={statsCustomRange.endDate} onChange={(event) => setStatsCustomRange((current) => ({ ...current, endDate: event.target.value }))} className="h-[32px] rounded-[7px] border border-[#E5E7EB] px-2 text-[12px]" />
+                    </div>
+                  )}
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+                    <div className="rounded-[8px] bg-[#F8FAFC] p-2"><p className="text-[#6B7280]">Volume</p><p className="text-[18px] font-bold text-[#111827]">{formatNumber(weeklyTotals.sent)}</p></div>
+                    <div className="rounded-[8px] bg-[#F8FAFC] p-2"><p className="text-[#6B7280]">Success</p><p className="text-[18px] font-bold text-[#15803D]">{pct(weeklyTotals.delivered, weeklyTotals.sent, 1)}%</p></div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {weeklyStats.map((day) => {
+                      const serverValues = selectedServers.map((server) => day.valuesByServer[server.id] ?? 0);
+                      const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
+                      const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
+                      const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
+                      const changed = draftValue.trim() !== "" && (!allSame || draftValue !== baseValue);
+                      const savingKey = `range:${day.key}`;
+                      return (
+                        <div key={day.key} className="grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border border-[#E5E7EB] p-2">
+                          <div>
+                            <p className="text-[12px] font-bold text-[#111827]">{day.label}</p>
+                            <p className="text-[10px] text-[#6B7280]">{day.dateLabel}</p>
+                          </div>
+                          <input
+                            value={draftValue}
+                            placeholder={allSame ? "0" : "Mixed"}
+                            onChange={(event) => setRangeDailyDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                            className="h-[30px] min-w-0 rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]"
+                          />
+                          <button
+                            onClick={() => saveRangeDayVolume(day.key, draftValue, day.dateLabel)}
+                            disabled={!changed || savingWeeklyStats[savingKey]}
+                            className="h-[30px] rounded-[6px] bg-[#4F46E5] px-2 text-[11px] font-semibold text-white disabled:opacity-40"
+                          >
+                            {savingWeeklyStats[savingKey] ? "..." : "Save"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto xl:block">
               <table className="w-full min-w-[1280px]">
                 <thead>
                   <tr className="border-b border-[#E5E7EB]">

@@ -379,8 +379,122 @@ export default function ProvidersPage() {
         </div>
       )}
 
+      {/* Mobile provider cards */}
+      <div className="space-y-3 xl:hidden">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
+              <div className="h-5 w-40 animate-pulse rounded bg-gray-100" />
+              <div className="mt-3 h-4 w-full animate-pulse rounded bg-gray-100" />
+              <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+            </div>
+          ))
+        ) : error ? (
+          <div className="rounded-[10px] border border-[#FECACA] bg-white p-5 text-center">
+            <p className="text-[13px] font-medium text-red-600">{error}</p>
+            <button onClick={fetchProviders} className="mt-3 h-[32px] rounded-[7px] border border-[#E5E7EB] px-3 text-[12px] font-medium">
+              Try Again
+            </button>
+          </div>
+        ) : providers.length === 0 ? (
+          <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-6 text-center">
+            <p className="text-[13px] text-[#6B7280]">No providers found</p>
+          </div>
+        ) : (
+          providers.map((provider) => (
+            <article key={provider.id} className={`rounded-[10px] border border-[#E5E7EB] p-4 ${providerRowTone(provider)}`}>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(provider.id)}
+                  onChange={() => setSelectedIds(prev => prev.includes(provider.id) ? prev.filter(id => id !== provider.id) : [...prev, provider.id])}
+                  className="mt-1 h-3.5 w-3.5 rounded border-[#D1D5DB]"
+                />
+                <ProviderLogo name={provider.name} website={provider.website} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <Link href={`/providers/${provider.id}`} className="block truncate text-[14px] font-bold text-[#111827]">
+                    {provider.name}
+                  </Link>
+                  <p className="mt-0.5 truncate text-[12px] text-[#6B7280]">
+                    {provider.website?.replace("https://", "").replace("http://", "") || provider.supportEmail || provider.salesEmail || "No website"}
+                  </p>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={
+                    <button className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] text-[#6B7280]" />
+                  }>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem render={<Link href={`/providers/${provider.id}`} className="flex items-center gap-2" />}>
+                      <Eye className="h-3.5 w-3.5 text-[#6B7280]" /> View details
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem render={<Link href={`/providers/${provider.id}?edit=1`} className="flex items-center gap-2" />}>
+                      <Edit className="h-3.5 w-3.5 text-[#6B7280]" /> Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={deletingProviders[provider.id]}
+                      onClick={() => deleteProvider(provider)}
+                      className="flex items-center gap-2 text-[#DC2626] focus:text-[#DC2626]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <StatusBadge value={provider.contactStatus} />
+                <StatusBadge value={provider.responseStatus} />
+                <StatusBadge value={provider.decision} />
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+                <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Country</p>
+                  <p className="mt-1 truncate font-medium text-[#111827]">{provider.country || "—"}</p>
+                </div>
+                <Link href={`/servers?providerId=${encodeURIComponent(provider.id)}`} className="rounded-[8px] bg-[#F8FAFC] p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Servers</p>
+                  <p className="mt-1 font-medium text-[#2563EB]">{provider.activeServers} active / {provider.totalServers} total</p>
+                </Link>
+                <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Stats</p>
+                  <p className="mt-1 font-medium text-[#111827]">{formatNumber(provider.totalSends)} sent</p>
+                </div>
+                <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Last Contact</p>
+                  <p className="mt-1 font-medium text-[#111827]">{formatDate(provider.lastContactDate)}</p>
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-2 text-[12px]">
+                <p className="line-clamp-2 text-[#374151]">
+                  <span className="font-semibold text-[#111827]">Note:</span> {providerNote(provider)}
+                </p>
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Contacted By</p>
+                  {provider.contactedUsers?.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {provider.contactedUsers.slice(0, 3).map((user) => (
+                        <span key={user.id} className={`inline-flex items-center rounded-[999px] px-2 py-0.5 text-[11px] font-semibold ${contactedUserChipClass(user.source)}`}>
+                          {user.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[#9CA3AF]">—</span>
+                  )}
+                </div>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
       {/* Data Table */}
-      <div className="bg-white rounded-[10px] border border-[#E5E7EB] overflow-hidden">
+      <div className="hidden overflow-hidden rounded-[10px] border border-[#E5E7EB] bg-white xl:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1700px]">
             <thead>

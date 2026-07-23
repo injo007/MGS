@@ -794,7 +794,7 @@ function ServersPageContent() {
       </div>
 
       <div className="rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-        <div className="flex border-b border-[#E5E7EB] px-4">
+        <div className="flex overflow-x-auto border-b border-[#E5E7EB] px-4">
           {TABS.map((tab) => (
             <button
               key={tab.key}
@@ -811,33 +811,33 @@ function ServersPageContent() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E7EB] p-4">
-          <select value={providerFilter} onChange={(e) => updateProviderFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+          <select value={providerFilter} onChange={(e) => updateProviderFilter(e.target.value)} className="h-[34px] min-w-[150px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:w-full">
             <option value="all">All Providers</option>
             {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
           </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[34px] min-w-[140px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
             <option value="all">All Statuses</option>
             {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
           </select>
-          <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+          <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-[34px] min-w-[130px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
             <option value="all">All Regions</option>
             {regions.map((region) => <option key={region} value={region}>{region}</option>)}
           </select>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-[34px] min-w-[120px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
             <option value="all">All Types</option>
             {types.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
-          <select value={billingFilter} onChange={(e) => setBillingFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+          <select value={billingFilter} onChange={(e) => setBillingFilter(e.target.value)} className="h-[34px] min-w-[150px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
             <option value="all">All Billing Cycles</option>
             {billingCycles.map((cycle) => <option key={cycle} value={cycle}>{cycle}</option>)}
           </select>
           {admin && (
-            <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151]">
+            <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="h-[34px] min-w-[130px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
               <option value="all">All Users</option>
               {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
           )}
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-[220px] flex-1 max-sm:min-w-full">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
             <input
               value={search}
@@ -852,7 +852,7 @@ function ServersPageContent() {
           </button>
           {admin && (
             <>
-              <Link href="/api/export?entity=servers" className="ml-auto inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]">
+              <Link href="/api/export?entity=servers" className="ml-auto inline-flex h-[34px] items-center gap-2 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB] max-sm:ml-0">
                 <Download className="h-3.5 w-3.5" />
                 Export
               </Link>
@@ -893,7 +893,7 @@ function ServersPageContent() {
           </button>
         </div>
 
-        <div className="flex items-center gap-3 border-b border-[#E5E7EB] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[#E5E7EB] px-4 py-3">
           <button onClick={togglePage} className="flex items-center gap-2 text-[12px] font-medium text-[#374151]">
             {paginated.length > 0 && paginated.every((server) => selected.includes(server.id)) ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
             {selected.length} selected
@@ -938,7 +938,98 @@ function ServersPageContent() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-4 xl:hidden">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
+                <div className="h-5 w-36 animate-pulse rounded bg-gray-100" />
+                <div className="mt-3 h-4 w-full animate-pulse rounded bg-gray-100" />
+              </div>
+            ))
+          ) : error ? (
+            <div className="rounded-[10px] border border-[#FECACA] bg-white p-5 text-center text-[13px] font-medium text-red-600">{error}</div>
+          ) : paginated.length === 0 ? (
+            <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-6 text-center text-[13px] text-[#6B7280]">No servers match the current filters.</div>
+          ) : (
+            paginated.map((server) => {
+              const selectedRow = selected.includes(server.id);
+              const primaryIp = server.ips?.[0];
+              const meta = ipMeta(primaryIp);
+              const region = detectedRegion(server);
+              return (
+                <article key={server.id} className={`rounded-[10px] border border-[#E5E7EB] p-4 ${serverRowTone(server.status, selectedRow)}`}>
+                  <div className="flex items-start gap-3">
+                    <button onClick={() => toggleRow(server.id)} className="mt-0.5">
+                      {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-[14px] font-bold text-[#2563EB]">{server.name}</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <ProviderLogo name={server.providerName || "Provider"} website={server.providerWebsite} size="sm" className="h-5 w-5 rounded-[5px]" />
+                            <span className="truncate text-[12px] font-medium text-[#374151]">{server.providerName ?? "-"}</span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-[5px] border border-[#BFDBFE] bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-semibold text-[#2563EB]">{serverType(server)}</span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="rounded-[5px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#4B5563]">{server.status}</span>
+                        {primaryIp?.address && <span className="rounded-[5px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#4B5563]">{primaryIp.address}</span>}
+                        {meta?.listedLabel && (
+                          <span className={`rounded-[5px] px-2 py-0.5 text-[11px] font-semibold ${meta.listed ? "bg-[#FEF2F2] text-[#DC2626]" : "bg-[#ECFDF5] text-[#15803D]"}`}>
+                            {meta.listedLabel}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+                    <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Region</p>
+                      <p className="mt-1 truncate font-medium text-[#111827]">{region ?? "-"}</p>
+                    </div>
+                    <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Cost</p>
+                      <p className="mt-1 font-medium text-[#111827]">{money(Number(server.monthlyCost || 0), server.currency || "USD")}</p>
+                    </div>
+                    <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Limit</p>
+                      <input
+                        value={limitDrafts[server.id] ?? ""}
+                        placeholder="Not set"
+                        onChange={(e) => setLimitDrafts({ ...limitDrafts, [server.id]: e.target.value })}
+                        onBlur={(e) => saveLimit(server, e.target.value)}
+                        className="mt-1 h-[30px] w-full rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]"
+                      />
+                    </div>
+                    <div className="rounded-[8px] bg-[#F8FAFC] p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Uptime</p>
+                      <p className="mt-1 font-medium text-[#111827]">{uptime(server)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0 text-[12px] text-[#6B7280]">
+                      Assigned: <span className="font-semibold text-[#111827]">{server.assignedUsers?.[0]?.name || "Unassigned"}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEdit(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#C7D2FE] px-2.5 text-[12px] font-semibold text-[#4F46E5]">
+                        <Edit className="h-3.5 w-3.5" /> Edit
+                      </button>
+                      <button onClick={() => deleteServer(server)} disabled={deletingServers[server.id]} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FECACA] px-2.5 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto xl:block">
           <table className="w-full min-w-[1220px]">
             <thead>
               <tr className="border-b border-[#E5E7EB] bg-white">

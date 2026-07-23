@@ -60,7 +60,7 @@ const navigation: NavItem[] = [
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
+export function Sidebar({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const isAdmin = String((session?.user as Record<string, unknown> | undefined)?.roleName || "").toLowerCase() === "admin";
@@ -144,6 +144,7 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
       <Link
         key={item.label}
         href={item.href!}
+        onClick={onNavigate}
         className={cn(
           "flex items-center gap-3 rounded-lg px-3 py-[11px] text-[13px] font-medium transition-all duration-150",
           depth > 0 ? "py-[10px]" : "",
