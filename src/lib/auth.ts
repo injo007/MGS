@@ -50,20 +50,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .set({ lastLoginAt: new Date() })
           .where(eq(users.id, user[0].id));
 
-        await sendAuditTelegramAlert({
+        sendAuditTelegramAlert({
           action: "login",
           entityType: "user",
           actorName: user[0].name,
           actorEmail: user[0].email,
           entityName: user[0].name,
           entityDetail: user[0].roleName,
+        }).catch((error) => {
+          console.warn("Failed to send login Telegram alert", error);
         });
 
         return {
           id: user[0].id,
           name: user[0].name,
           email: user[0].email,
-          image: user[0].image,
           roleId: user[0].roleId,
           roleName: user[0].roleName,
         };
@@ -79,7 +80,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.roleId = (user as any).roleId;
         token.roleName = (user as any).roleName;
-        token.image = (user as any).image;
+        delete token.image;
+        delete token.picture;
       }
       return token;
     },
@@ -88,7 +90,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         (session.user as any).id = token.sub;
         (session.user as any).roleId = token.roleId;
         (session.user as any).roleName = token.roleName;
-        session.user.image = token.image as string | null | undefined;
+        session.user.image = null;
       }
       return session;
     },
