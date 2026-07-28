@@ -290,6 +290,7 @@ export const providers = pgTable(
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id),
+    pinned: boolean("pinned").default(false).notNull(),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     closedReason: text("closed_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -301,6 +302,7 @@ export const providers = pgTable(
     index("providers_contact_status_idx").on(t.contactStatus),
     index("providers_assigned_user_idx").on(t.assignedUserId),
     index("providers_country_idx").on(t.country),
+    index("providers_pinned_idx").on(t.pinned),
     index("providers_next_follow_up_idx").on(t.nextFollowUpDate),
     uniqueIndex("providers_website_unique").on(t.website),
   ]

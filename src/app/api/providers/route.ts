@@ -180,8 +180,8 @@ export async function GET(request: Request) {
   const orderFn = sortOrder === "asc" ? asc : desc;
   const secondaryOrder = sortBy === "score" ? desc(providers.updatedAt) : orderFn(sortColumn);
   const orderBy = sortBy === "score"
-    ? [desc(providerScoreExpr), desc(totalSendsExpr), secondaryOrder]
-    : [secondaryOrder, desc(providerScoreExpr), desc(totalSendsExpr)];
+    ? [desc(providers.pinned), desc(providerScoreExpr), desc(totalSendsExpr), secondaryOrder]
+    : [desc(providers.pinned), secondaryOrder, desc(providerScoreExpr), desc(totalSendsExpr)];
 
   const [data, totalResult] = await Promise.all([
     db
@@ -221,6 +221,7 @@ export async function GET(request: Request) {
         refundPolicy: providers.refundPolicy,
         assignedUserId: providers.assignedUserId,
         createdById: providers.createdById,
+        pinned: providers.pinned,
         closedAt: providers.closedAt,
         closedReason: providers.closedReason,
         createdAt: providers.createdAt,

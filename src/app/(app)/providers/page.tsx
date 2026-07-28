@@ -14,6 +14,9 @@ import {
   Edit,
   Trash2,
   Globe2,
+  Pin,
+  PinOff,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -58,6 +61,7 @@ interface Provider {
   assignedUserId: string | null;
   assignedUserName: string | null;
   assignedUserEmail: string | null;
+  pinned: boolean;
   assignedUsers: Array<{
     id: string;
     name: string;
@@ -257,6 +261,21 @@ export default function ProvidersPage() {
     }
   };
 
+  const updateProviderPriority = async (provider: Provider, payload: { pinned?: boolean; markAsNew?: boolean }) => {
+    try {
+      const res = await fetch(`/api/providers/${provider.id}/priority`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success(payload.markAsNew ? "Provider moved to newest" : payload.pinned ? "Provider pinned" : "Provider unpinned");
+      fetchProviders();
+    } catch {
+      toast.error("Failed to update provider priority");
+    }
+  };
+
   const detectCountries = async () => {
     setDetectingCountries(true);
     try {
@@ -423,9 +442,12 @@ export default function ProvidersPage() {
                 />
                 <ProviderLogo name={provider.name} website={provider.website} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <Link href={`/providers/${provider.id}`} className="block truncate text-[14px] font-bold text-[#111827]">
-                    {provider.name}
-                  </Link>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    {provider.pinned && <Pin className="h-3.5 w-3.5 shrink-0 fill-[#4F46E5] text-[#4F46E5]" />}
+                    <Link href={`/providers/${provider.id}`} className="block truncate text-[14px] font-bold text-[#111827]">
+                      {provider.name}
+                    </Link>
+                  </div>
                   <p className="mt-0.5 truncate text-[12px] text-[#6B7280]">
                     {provider.website?.replace("https://", "").replace("http://", "") || provider.supportEmail || provider.salesEmail || "No website"}
                   </p>
@@ -444,6 +466,14 @@ export default function ProvidersPage() {
                     <DropdownMenuItem render={<Link href={`/providers/${provider.id}?edit=1`} className="flex items-center gap-2" />}>
                       <Edit className="h-3.5 w-3.5 text-[#6B7280]" /> Edit
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => updateProviderPriority(provider, { pinned: !provider.pinned })} className="flex items-center gap-2">
+                      {provider.pinned ? <PinOff className="h-3.5 w-3.5 text-[#6B7280]" /> : <Pin className="h-3.5 w-3.5 text-[#6B7280]" />}
+                      {provider.pinned ? "Unpin" : "Pin to top"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => updateProviderPriority(provider, { markAsNew: true })} className="flex items-center gap-2">
+                      <Sparkles className="h-3.5 w-3.5 text-[#6B7280]" /> Mark as new
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       disabled={deletingProviders[provider.id]}
                       onClick={() => deleteProvider(provider)}
@@ -622,9 +652,12 @@ export default function ProvidersPage() {
                       <Link href={`/providers/${provider.id}`} className="flex items-center gap-2.5 group">
                         <ProviderLogo name={provider.name} website={provider.website} size="sm" />
                         <div className="min-w-0">
-                          <p className="text-[13px] font-medium text-[#111827] group-hover:text-[#4F46E5] transition-colors truncate">
-                            {provider.name}
-                          </p>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            {provider.pinned && <Pin className="h-3.5 w-3.5 shrink-0 fill-[#4F46E5] text-[#4F46E5]" />}
+                            <p className="truncate text-[13px] font-medium text-[#111827] transition-colors group-hover:text-[#4F46E5]">
+                              {provider.name}
+                            </p>
+                          </div>
                           <p className="text-[11px] text-[#9CA3AF] truncate">
                             {provider.website?.replace("https://", "").replace("http://", "") || "—"}
                           </p>
@@ -765,6 +798,13 @@ export default function ProvidersPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem render={<Link href={`/providers/new?edit=${provider.id}`} className="flex items-center gap-2" />}>
                             <Edit className="h-3.5 w-3.5 text-[#6B7280]" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => updateProviderPriority(provider, { pinned: !provider.pinned })} className="flex items-center gap-2">
+                            {provider.pinned ? <PinOff className="h-3.5 w-3.5 text-[#6B7280]" /> : <Pin className="h-3.5 w-3.5 text-[#6B7280]" />}
+                            {provider.pinned ? "Unpin" : "Pin to top"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => updateProviderPriority(provider, { markAsNew: true })} className="flex items-center gap-2">
+                            <Sparkles className="h-3.5 w-3.5 text-[#6B7280]" /> Mark as new
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
