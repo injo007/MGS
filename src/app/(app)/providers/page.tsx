@@ -143,6 +143,7 @@ export default function ProvidersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [decisionFilter, setDecisionFilter] = useState("all");
   const [contactFilter, setContactFilter] = useState("all");
+  const [sortMode, setSortMode] = useState<"score" | "new">("score");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -180,7 +181,7 @@ export default function ProvidersPage() {
     params.set("pageSize", String(pageSize));
     if (contactFilter !== "all") params.set("contactStatus", contactFilter);
     if (decisionFilter !== "all") params.set("decision", decisionFilter);
-    params.set("sortBy", "score");
+    params.set("sortBy", sortMode === "new" ? "createdAt" : "score");
     params.set("sortOrder", "desc");
 
     try {
@@ -199,7 +200,7 @@ export default function ProvidersPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, pageSize, contactFilter, decisionFilter]);
+  }, [debouncedSearch, page, pageSize, contactFilter, decisionFilter, sortMode]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -218,6 +219,7 @@ export default function ProvidersPage() {
     setSearch("");
     setDecisionFilter("all");
     setContactFilter("all");
+    setSortMode("score");
     setPage(1);
   };
 
@@ -274,7 +276,7 @@ export default function ProvidersPage() {
     }
   };
 
-  const hasActiveFilters = decisionFilter !== "all" || contactFilter !== "all" || search;
+  const hasActiveFilters = decisionFilter !== "all" || contactFilter !== "all" || sortMode !== "score" || search;
   const startRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const endRow = Math.min(page * pageSize, total);
 
@@ -351,6 +353,15 @@ export default function ProvidersPage() {
           <option value="ready_to_contact">Ready to Contact</option>
           <option value="contacted">Contacted</option>
           <option value="follow_up_due">Follow-up Due</option>
+        </select>
+        <select
+          value={sortMode}
+          onChange={(e) => { setSortMode(e.target.value as "score" | "new"); setPage(1); }}
+          className="h-[34px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] max-sm:text-[12px]"
+          aria-label="Provider sort"
+        >
+          <option value="score">Top Sending Score</option>
+          <option value="new">New Providers First</option>
         </select>
         {hasActiveFilters && (
           <button
@@ -464,8 +475,8 @@ export default function ProvidersPage() {
                   <p className="mt-1 font-medium text-[#111827]">{formatNumber(provider.totalSends)} sent</p>
                 </div>
                 <div className="rounded-[8px] bg-[#F8FAFC] p-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Last Contact</p>
-                  <p className="mt-1 font-medium text-[#111827]">{formatDate(provider.lastContactDate)}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Starting Price</p>
+                  <p className="mt-1 font-medium text-[#111827]">{formatMoney(provider.startingPrice, provider.currency || "USD")}</p>
                 </div>
               </div>
 
@@ -547,7 +558,7 @@ export default function ProvidersPage() {
                   Assigned / Usage
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
-                  Last / Next
+                  Starting Price
                 </th>
                 <th className="text-left text-[11px] font-semibold text-[#374151] px-3 py-2.5 uppercase tracking-wider">
                   Score
@@ -704,8 +715,8 @@ export default function ProvidersPage() {
                       <p className="text-[11px] text-[#15803D]">{percent(provider.totalSuccessful, provider.totalSends)} delivered</p>
                     </td>
                     <td className="px-3 py-2.5">
-                      <p className="text-[12px] font-semibold text-[#111827]">{formatMoney(provider.startingPrice, provider.currency || "USD")}</p>
-                      <p className="text-[11px] text-[#6B7280]">{provider.billingMethod || provider.paymentMethod || "—"}</p>
+                      <p className="text-[12px] font-semibold text-[#111827]">{provider.billingMethod || "—"}</p>
+                      <p className="text-[11px] text-[#6B7280]">{provider.paymentMethod || "—"}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       {(provider.assignedUsers?.length || provider.assignedUserName) ? (
@@ -729,8 +740,8 @@ export default function ProvidersPage() {
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <p className="text-[12px] font-medium text-[#374151]">{formatDate(provider.lastContactDate)}</p>
-                      <p className="text-[11px] text-[#6B7280]">Next {formatDate(provider.nextFollowUpDate)}</p>
+                      <p className="text-[12px] font-semibold text-[#111827]">{formatMoney(provider.startingPrice, provider.currency || "USD")}</p>
+                      <p className="text-[11px] text-[#6B7280]">{provider.billingMethod || provider.paymentMethod || "—"}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">

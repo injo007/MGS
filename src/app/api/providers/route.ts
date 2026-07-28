@@ -179,6 +179,9 @@ export async function GET(request: Request) {
   const sortColumn = (providers as any)[sortBy] || providers.createdAt;
   const orderFn = sortOrder === "asc" ? asc : desc;
   const secondaryOrder = sortBy === "score" ? desc(providers.updatedAt) : orderFn(sortColumn);
+  const orderBy = sortBy === "score"
+    ? [desc(providerScoreExpr), desc(totalSendsExpr), secondaryOrder]
+    : [secondaryOrder, desc(providerScoreExpr), desc(totalSendsExpr)];
 
   const [data, totalResult] = await Promise.all([
     db
@@ -234,7 +237,7 @@ export async function GET(request: Request) {
       .from(providers)
       .leftJoin(users, eq(providers.assignedUserId, users.id))
       .where(where)
-      .orderBy(desc(providerScoreExpr), desc(totalSendsExpr), secondaryOrder)
+      .orderBy(...orderBy)
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     db.select({ total: count() }).from(providers).where(where),

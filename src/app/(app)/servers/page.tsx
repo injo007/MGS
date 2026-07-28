@@ -148,6 +148,11 @@ function serverRowTone(status: string, selected: boolean) {
   }
 }
 
+function serverExpiryTone(days: number | null) {
+  if (days === null || days > 30) return "";
+  return "border-l-[#EF4444] bg-[#FEF2F2] shadow-[0_0_0_1px_rgba(239,68,68,0.25),inset_10px_0_18px_-14px_rgba(239,68,68,0.95)] animate-pulse hover:bg-[#FEE2E2]";
+}
+
 function dateLabel(value: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -964,11 +969,12 @@ function ServersPageContent() {
           ) : (
             paginated.map((server) => {
               const selectedRow = selected.includes(server.id);
+              const renewalDays = daysUntil(server.expirationDate);
               const primaryIp = server.ips?.[0];
               const meta = ipMeta(primaryIp);
               const region = detectedRegion(server);
               return (
-                <article key={server.id} className={`rounded-[10px] border border-[#E5E7EB] p-4 ${serverRowTone(server.status, selectedRow)}`}>
+                <article key={server.id} className={`rounded-[10px] border border-[#E5E7EB] p-4 ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}>
                   <div className="flex items-start gap-3">
                     <button onClick={() => toggleRow(server.id)} className="mt-0.5">
                       {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
@@ -986,6 +992,11 @@ function ServersPageContent() {
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         <span className="rounded-[5px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#4B5563]">{server.status}</span>
+                        {renewalDays !== null && renewalDays <= 30 && (
+                          <span className="rounded-[5px] bg-[#FEE2E2] px-2 py-0.5 text-[11px] font-bold text-[#B91C1C]">
+                            {renewalDays < 0 ? "Expired" : `Expires in ${renewalDays} days`}
+                          </span>
+                        )}
                         {primaryIp?.address && <span className="rounded-[5px] bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#4B5563]">{primaryIp.address}</span>}
                         {meta?.listedLabel && (
                           <span className={`rounded-[5px] px-2 py-0.5 text-[11px] font-semibold ${meta.listed ? "bg-[#FEF2F2] text-[#DC2626]" : "bg-[#ECFDF5] text-[#15803D]"}`}>
@@ -1079,7 +1090,7 @@ function ServersPageContent() {
                   const meta = ipMeta(primaryIp);
                   const region = detectedRegion(server);
                   return (
-                    <tr key={server.id} className={`border-b border-[#F1F5F9] transition-colors ${serverRowTone(server.status, selectedRow)}`}>
+                    <tr key={server.id} className={`border-b border-[#F1F5F9] transition-colors ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}>
                       <td className="px-4 py-3">
                         <button onClick={() => toggleRow(server.id)}>
                           {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
