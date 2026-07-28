@@ -49,6 +49,7 @@ export const serverStatusEnum = pgEnum("server_status", [
   "down",
   "port_closed",
   "ts04_error",
+  "tss05_error",
   "tss09_error",
   "bounce",
   "complaint",

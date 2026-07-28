@@ -88,3 +88,44 @@ export async function PUT(
     status: updated.status,
   });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isAdmin(session)) return forbidden("Team is available to admins only.");
+
+  const { id } = await params;
+  if (id === session.user.id) {
+    return NextResponse.json({ error: "You cannot delete your own user account." }, { status: 400 });
+  }
+
+  const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!existing) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  try {
+    await db.delete(users).where(eq(users.id, id));
+  } catch {
+    return NextResponse.json(
+      { error: "This user has linked CRM history. Suspend the user instead, or reassign their records before deleting." },
+      { status: 409 }
+    );
+  }
+
+  await db.insert(auditLogs).values({
+    userId: session.user.id,
+    action: "delete",
+    entityType: "user",
+    entityId: id,
+    previousValue: { name: existing.name, email: existing.email, status: existing.status },
+    newValue: null,
+  });
+
+  return NextResponse.json({ success: true });
+}

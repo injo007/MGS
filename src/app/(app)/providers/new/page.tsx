@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 const optionalText = z.preprocess(
@@ -171,6 +171,7 @@ function NewProviderForm() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
+  const [syncingResponse, setSyncingResponse] = useState(false);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [initialManualContactedByUserId, setInitialManualContactedByUserId] = useState("");
 
@@ -259,6 +260,26 @@ function NewProviderForm() {
       toast.error(err instanceof Error ? err.message : isEditMode ? "Failed to update provider" : "Failed to create provider");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const syncResponseFromInbox = async () => {
+    if (!editId) return;
+    setSyncingResponse(true);
+    try {
+      const res = await fetch(`/api/providers/${editId}/sync-response`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to sync provider response");
+      const provider = json.provider || {};
+      form.setValue("contactStatus", provider.contactStatus || "contacted");
+      form.setValue("responseStatus", provider.responseStatus || "replied");
+      form.setValue("decision", provider.decision || "pending");
+      form.setValue("port25Status", provider.port25Status || "unknown");
+      toast.success(`Synced from inbox: ${json.responseType || "provider response"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync provider response");
+    } finally {
+      setSyncingResponse(false);
     }
   };
 
@@ -404,7 +425,20 @@ function NewProviderForm() {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[13px] font-medium text-[#374151]">Response Status</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[13px] font-medium text-[#374151]">Response Status</label>
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      onClick={syncResponseFromInbox}
+                      disabled={syncingResponse}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#4F46E5] hover:underline disabled:opacity-60"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${syncingResponse ? "animate-spin" : ""}`} />
+                      Sync Inbox
+                    </button>
+                  )}
+                </div>
                 <select
                   value={form.watch("responseStatus") || ""}
                   onChange={(e) => { if (e.target.value) form.setValue("responseStatus", e.target.value) }}

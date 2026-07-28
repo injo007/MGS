@@ -73,6 +73,7 @@ export async function GET(request: Request) {
     ownedProviders,
     activeServers,
     totalServers,
+    monthlyServerCost,
     totalIps,
     tasksByStatus,
     outreachByChannel,
@@ -122,6 +123,11 @@ export async function GET(request: Request) {
       .where(assignedServerCondition ? and(eq(servers.status, "active"), assignedServerCondition) : eq(servers.status, "active")),
 
     db.select({ total: count() }).from(servers).where(assignedServerCondition),
+
+    db
+      .select({ total: sql<number>`coalesce(sum(${servers.monthlyCost}), 0)` })
+      .from(servers)
+      .where(assignedServerCondition),
 
     db.select({ total: count() }).from(ipAddresses).where(assignedIpCondition),
 
@@ -407,6 +413,7 @@ export async function GET(request: Request) {
     servers: {
       total: totalServers[0]?.total || 0,
       active: activeServers[0]?.total || 0,
+      monthlyCost: Number(monthlyServerCost[0]?.total || 0),
     },
     ipAddresses: {
       total: totalIps[0]?.total || 0,

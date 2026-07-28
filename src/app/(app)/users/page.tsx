@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { ImageIcon, Plus, Inbox, Loader2, Upload, X } from "lucide-react";
+import { ImageIcon, Plus, Inbox, Loader2, Upload, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserItem {
@@ -179,6 +179,21 @@ export default function UsersPage() {
     }
   };
 
+  const deleteUser = async (user: UserItem) => {
+    if (!window.confirm(`Delete user "${user.name}"? This cannot be undone if the user has no linked CRM history.`)) return;
+    try {
+      const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to delete user");
+      }
+      toast.success("User deleted");
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete user");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between max-sm:flex-col max-sm:items-start max-sm:gap-3">
@@ -262,12 +277,18 @@ export default function UsersPage() {
                       {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : "Never"}
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">
                         <button
                           className="text-[13px] font-medium text-[#4F46E5] hover:text-[#4338CA] transition-colors"
                           onClick={() => openEdit(user)}
                         >
                           Edit
+                        </button>
+                        <button
+                          className="inline-flex items-center gap-1 text-[13px] font-medium text-[#DC2626] transition-colors hover:text-[#B91C1C]"
+                          onClick={() => deleteUser(user)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Delete
                         </button>
                       </div>
                     </td>

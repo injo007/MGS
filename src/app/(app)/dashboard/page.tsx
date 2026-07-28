@@ -45,7 +45,7 @@ interface DashboardStats {
     byDecision: Record<string, number>;
     owned: number;
   };
-  servers: { total: number; active: number };
+  servers: { total: number; active: number; monthlyCost: number };
   ipAddresses: { total: number };
   tasks: { byStatus: Record<string, number> };
   outreach: { byChannel: Record<string, number> };
@@ -237,7 +237,7 @@ function userSendingWeeks(data: DashboardStats["userSendingOverTime"]) {
   };
 }
 
-function money(value: string | null, currency = "USD") {
+function money(value: string | number | null, currency = "USD") {
   const amount = Number(value || 0);
   if (!amount) return "-";
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
@@ -358,7 +358,7 @@ export default function DashboardPage() {
   const maxWeeklySends = Math.max(1, ...weeklySendingLeaders.map((user) => user.totalSends));
   const totalRankedProviders = providerContactLeaders.reduce((sum, user) => sum + user.providerCount, 0);
   const totalRankedSends = weeklySendingLeaders.reduce((sum, user) => sum + user.totalSends, 0);
-  const displayedDashboardServers = dashboardServers.slice(0, 3);
+  const displayedDashboardServers = dashboardServers.slice(0, 5);
   const totalDashboardServers = stats?.servers.total ?? dashboardServers.length;
   const remainingDashboardServers = Math.max(0, totalDashboardServers - displayedDashboardServers.length);
   const serverStatusColors: Record<string, string> = {
@@ -369,6 +369,9 @@ export default function DashboardPage() {
     canceled: "#EF4444",
     archived: "#64748B",
     expired: "#EF4444",
+    ts04_error: "#4F46E5",
+    tss05_error: "#F43F5E",
+    tss09_error: "#7C3AED",
     unknown: "#94A3B8",
   };
   const serverStatusBreakdown = useMemo(() => {
@@ -839,9 +842,9 @@ export default function DashboardPage() {
                 No servers available yet.
               </div>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] min-[2000px]:grid-cols-1">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(280px,1.15fr)]">
                 <div className="min-w-0 space-y-4">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2">
                     <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
                       <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Total</p>
                       <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{totalDashboardServers}</p>
@@ -853,6 +856,10 @@ export default function DashboardPage() {
                     <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
                       <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Other</p>
                       <p className="mt-1 text-[18px] font-bold leading-none text-[#111827]">{Math.max(0, totalDashboardServers - (stats?.servers.active ?? 0))}</p>
+                    </div>
+                    <div className="min-w-0 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.03em] text-[#64748B]">Monthly Cost</p>
+                      <p className="mt-1 truncate text-[18px] font-bold leading-none text-[#111827]">{money(stats?.servers.monthlyCost ?? 0)}</p>
                     </div>
                   </div>
 
@@ -887,7 +894,7 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="divide-y divide-[#F1F5F9]">
-                    {displayedDashboardServers.slice(0, 2).map((server) => (
+                    {displayedDashboardServers.map((server) => (
                       <div key={server.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
                         <div className="min-w-0">
                           <Link href="/servers" className="block truncate text-[12px] font-bold text-[#2563EB] hover:underline">

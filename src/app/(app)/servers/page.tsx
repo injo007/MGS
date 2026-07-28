@@ -134,6 +134,7 @@ function serverRowTone(status: string, selected: boolean) {
     case "port_closed":
       return "border-l-4 border-l-[#F97316] bg-white shadow-[inset_8px_0_14px_-16px_rgba(249,115,22,0.5)] hover:bg-[#F8FAFC]";
     case "ts04_error":
+    case "tss05_error":
     case "tss09_error":
     case "bounce":
     case "complaint":
@@ -934,6 +935,7 @@ function ServersPageContent() {
             <option value="paused">Pause</option>
             <option value="suspended">Suspend</option>
             <option value="ts04_error">Mark TSS04</option>
+            <option value="tss05_error">Mark TSS05</option>
             <option value="tss09_error">Mark TSS09</option>
             <option value="bounce">Mark Bounce</option>
           </select>
