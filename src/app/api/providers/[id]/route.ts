@@ -138,6 +138,18 @@ async function recordManualProviderContact({
   if (!contactedByUserId) return null;
 
   const now = new Date();
+  const [existingManualContact] = await db
+    .select({ id: outreachLogs.id })
+    .from(outreachLogs)
+    .where(and(
+      eq(outreachLogs.providerId, providerId),
+      eq(outreachLogs.sentById, contactedByUserId),
+      eq(outreachLogs.channel, "contact_form")
+    ))
+    .limit(1);
+
+  if (existingManualContact) return existingManualContact;
+
   const [created] = await db
     .insert(outreachLogs)
     .values({
@@ -241,7 +253,11 @@ export async function GET(
     })
     .from(outreachLogs)
     .innerJoin(users, eq(users.id, outreachLogs.sentById))
-    .where(and(eq(outreachLogs.providerId, id), isNotNull(outreachLogs.sentById)))
+    .where(and(
+      eq(outreachLogs.providerId, id),
+      eq(outreachLogs.channel, "contact_form"),
+      isNotNull(outreachLogs.sentById)
+    ))
     .orderBy(desc(outreachLogs.date))
     .limit(1);
 

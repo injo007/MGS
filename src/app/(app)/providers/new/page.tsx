@@ -175,7 +175,6 @@ function NewProviderForm() {
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
   const [syncingResponse, setSyncingResponse] = useState(false);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
-  const [initialManualContactedByUserId, setInitialManualContactedByUserId] = useState("");
 
   const form = useForm<ProviderFormData>({
     resolver: zodResolver(providerSchema) as Resolver<ProviderFormData>,
@@ -241,7 +240,6 @@ function NewProviderForm() {
         }
         const rawManualContactedByUserId = textOrEmpty(formatted.manualContactedByUserId);
         formatted.manualContactedByUserId = isAdmin || rawManualContactedByUserId === currentUserId ? rawManualContactedByUserId : "";
-        setInitialManualContactedByUserId(rawManualContactedByUserId);
         form.reset(normalizeProviderFormData(formatted));
       })
       .catch((err) => {
@@ -258,7 +256,7 @@ function NewProviderForm() {
       const url = isEditMode ? `/api/providers/${editId}` : "/api/providers";
       const method = isEditMode ? "PUT" : "POST";
       const payload = buildProviderPayload(data);
-      if (!isEditMode || !data.manualContactedByUserId || data.manualContactedByUserId === initialManualContactedByUserId) {
+      if (!isEditMode || !data.manualContactedByUserId) {
         delete payload.manualContactedByUserId;
       }
       const res = await fetch(url, {

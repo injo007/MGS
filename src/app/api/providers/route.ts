@@ -290,7 +290,13 @@ export async function GET(request: Request) {
         })
         .from(outreachLogs)
         .innerJoin(users, eq(users.id, outreachLogs.sentById))
-        .where(and(inArray(outreachLogs.providerId, providerIds), inArray(outreachLogs.sendResult, ["sent", "delivered"])))
+        .where(and(
+          inArray(outreachLogs.providerId, providerIds),
+          sql`(
+            ${outreachLogs.sendResult} in ('sent', 'delivered')
+            or (${outreachLogs.channel} = 'contact_form' and ${outreachLogs.sentById} is not null)
+          )`
+        ))
         .orderBy(desc(outreachLogs.date)),
       db.select({ id: users.id, name: users.name, email: users.email }).from(users),
       getImapConfigs(undefined, true),

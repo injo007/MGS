@@ -254,6 +254,9 @@ export async function PUT(
 
   const admin = isAdmin(session);
   const { assignedUserIds, ipAddresses: ipAddressValues, manualContactedByUserId, ...serverData } = body;
+  if (typeof serverData.status === "string" && serverData.status !== "paused") {
+    serverData.pauseUntil = null;
+  }
   const cleanedServerData = cleanServerPayload(serverData);
   const cleanedIpAddresses = cleanIpAddressList(ipAddressValues);
   const requestedAssignedUserIds = Array.isArray(assignedUserIds) ? assignedUserIds : null;

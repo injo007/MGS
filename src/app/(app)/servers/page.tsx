@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
 import { ProviderLogo } from "@/components/shared/provider-logo";
 import { SERVER_STATUSES } from "@/lib/constants";
 import { BLACKLIST_PROVIDER_OPTIONS, type BlacklistProvider } from "@/lib/blacklist-providers";
@@ -174,6 +175,14 @@ function formatDateTimeLocal(value: string | null) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
+function dateTimeParts(value: string | null) {
+  const formatted = formatDateTimeLocal(value);
+  return {
+    date: formatted.slice(0, 10),
+    time: formatted.slice(11, 16) || "09:00",
+  };
+}
+
 function pauseRemaining(value: string | null, now = Date.now()) {
   if (!value) return null;
   const diff = new Date(value).getTime() - now;
@@ -333,6 +342,11 @@ function ServersPageContent() {
   const [blacklistProvider, setBlacklistProvider] = useState<BlacklistProvider>("hetrixtools");
   const [deletingStatistics, setDeletingStatistics] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
+  const [pauseTargetIds, setPauseTargetIds] = useState<string[]>([]);
+  const [pauseDate, setPauseDate] = useState<Date | undefined>();
+  const [pauseTime, setPauseTime] = useState("09:00");
+  const [savingPause, setSavingPause] = useState(false);
   const [form, setForm] = useState({
     providerId: "",
     name: "",
@@ -504,16 +518,24 @@ function ServersPageContent() {
 
   const bulkUpdateStatus = async (status: string) => {
     if (selected.length === 0) return;
+    if (status === "paused") {
+      openPauseDialog();
+      return;
+    }
     try {
-      await Promise.all(
+      const responses = await Promise.all(
         selected.map((id) =>
           fetch(`/api/servers/${id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status }),
+            body: JSON.stringify({ status, pauseUntil: null }),
           })
         )
       );
+      if (responses.some((response) => !response.ok)) throw new Error("One or more servers could not be updated");
+      setServers((current) => current.map((server) =>
+        selected.includes(server.id) ? { ...server, status, pauseUntil: null } : server
+      ));
       toast.success("Servers updated");
       setSelected([]);
       fetchServers();
@@ -688,51 +710,93 @@ function ServersPageContent() {
 
   const saveStatus = async (server: ServerRow, status: string) => {
     if (status === server.status) return;
+    if (status === "paused") {
+      openPauseDialog(server);
+      return;
+    }
     setSavingStatuses((state) => ({ ...state, [server.id]: true }));
+    setServers((current) => current.map((row) =>
+      row.id === server.id ? { ...row, status, pauseUntil: null } : row
+    ));
     try {
       const res = await fetch(`/api/servers/${server.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, pauseUntil: status === "paused" ? server.pauseUntil : null }),
+        body: JSON.stringify({ status, pauseUntil: null }),
       });
       if (!res.ok) throw new Error(await res.text());
       toast.success("Server status updated");
       fetchServers();
     } catch {
       toast.error("Failed to update server status");
+      fetchServers();
     } finally {
       setSavingStatuses((state) => ({ ...state, [server.id]: false }));
     }
   };
 
-  const schedulePause = async (server: ServerRow) => {
-    const value = window.prompt("Pause duration in hours, or exact resume date/time like 2026-07-30 09:00");
-    if (!value) return;
-    const trimmed = value.trim();
-    const hours = Number(trimmed);
-    const resumeAt = Number.isFinite(hours) && hours > 0
-      ? new Date(Date.now() + hours * 3600000)
-      : new Date(trimmed.replace(" ", "T"));
+  const setPausePickerValue = (value: Date) => {
+    setPauseDate(value);
+    setPauseTime(`${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`);
+  };
 
-    if (Number.isNaN(resumeAt.getTime()) || resumeAt.getTime() <= Date.now()) {
-      toast.error("Enter a future pause duration or date/time");
+  const openPauseDialog = (server?: ServerRow) => {
+    const targets = server ? [server.id] : selected;
+    if (targets.length === 0) return;
+    const existingResume = server?.pauseUntil ? new Date(server.pauseUntil) : null;
+    const defaultResume = existingResume && existingResume.getTime() > Date.now()
+      ? existingResume
+      : new Date(Date.now() + 3600000);
+    defaultResume.setSeconds(0, 0);
+    setPauseTargetIds(targets);
+    setPausePickerValue(defaultResume);
+    setPauseDialogOpen(true);
+  };
+
+  const applyScheduledPause = async () => {
+    if (!pauseDate || pauseTargetIds.length === 0) return;
+    const [hours, minutes] = pauseTime.split(":").map(Number);
+    const resumeAt = new Date(
+      pauseDate.getFullYear(),
+      pauseDate.getMonth(),
+      pauseDate.getDate(),
+      Number.isFinite(hours) ? hours : 0,
+      Number.isFinite(minutes) ? minutes : 0,
+      0,
+      0
+    );
+    if (resumeAt.getTime() <= Date.now()) {
+      toast.error("Select a future resume date and time");
       return;
     }
 
-    setSavingStatuses((state) => ({ ...state, [server.id]: true }));
+    setSavingPause(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "paused", pauseUntil: resumeAt.toISOString() }),
-      });
-      if (!res.ok) throw new Error("Failed to schedule pause");
-      toast.success(`Server paused until ${resumeAt.toLocaleString()}`);
+      const responses = await Promise.all(
+        pauseTargetIds.map((id) =>
+          fetch(`/api/servers/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "paused", pauseUntil: resumeAt.toISOString() }),
+          })
+        )
+      );
+      if (responses.some((response) => !response.ok)) throw new Error("One or more servers could not be paused");
+      setServers((current) => current.map((server) =>
+        pauseTargetIds.includes(server.id)
+          ? { ...server, status: "paused", pauseUntil: resumeAt.toISOString() }
+          : server
+      ));
+      toast.success(
+        `${pauseTargetIds.length} server${pauseTargetIds.length === 1 ? "" : "s"} paused until ${resumeAt.toLocaleString()}`
+      );
+      setPauseDialogOpen(false);
+      setSelected([]);
       fetchServers();
     } catch {
-      toast.error("Failed to schedule pause");
+      toast.error("Failed to schedule server pause");
     } finally {
-      setSavingStatuses((state) => ({ ...state, [server.id]: false }));
+      setSavingPause(false);
     }
   };
 
@@ -1125,7 +1189,7 @@ function ServersPageContent() {
                       <button onClick={() => openEdit(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#C7D2FE] bg-white px-2.5 text-[12px] font-semibold text-[#4F46E5]">
                         <Edit className="h-3.5 w-3.5" /> Edit
                       </button>
-                      <button onClick={() => schedulePause(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FDE68A] bg-white px-2.5 text-[12px] font-semibold text-[#92400E]">
+                      <button onClick={() => openPauseDialog(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FDE68A] bg-white px-2.5 text-[12px] font-semibold text-[#92400E]">
                         <CalendarClock className="h-3.5 w-3.5" /> {remainingPause ? "Change" : "Pause"}
                       </button>
                       <button onClick={() => deleteServer(server)} disabled={deletingServers[server.id]} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FECACA] bg-white px-2.5 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">
@@ -1328,7 +1392,7 @@ function ServersPageContent() {
                             <Edit className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => schedulePause(server)}
+                            onClick={() => openPauseDialog(server)}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#B45309] hover:bg-[#FFFBEB]"
                             title={remainingPause ? "Change pause countdown" : "Pause with countdown"}
                           >
@@ -1369,6 +1433,84 @@ function ServersPageContent() {
       </div>
 
       <Dialog
+        open={pauseDialogOpen}
+        onOpenChange={(open) => {
+          if (!savingPause) setPauseDialogOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-[430px]">
+          <DialogTitle>Schedule server pause</DialogTitle>
+          <div className="space-y-4">
+            <div className="rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2.5">
+              <p className="text-[12px] font-semibold text-[#92400E]">
+                {pauseTargetIds.length} selected server{pauseTargetIds.length === 1 ? "" : "s"}
+              </p>
+              <p className="mt-0.5 text-[11px] text-[#78716C]">
+                Sending remains paused until the selected local date and time.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[1, 6, 24].map((hours) => (
+                <button
+                  key={hours}
+                  type="button"
+                  onClick={() => setPausePickerValue(new Date(Date.now() + hours * 3600000))}
+                  className="h-8 rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#4B5563] hover:border-[#C7D2FE] hover:bg-[#EEF2FF] hover:text-[#4F46E5]"
+                >
+                  +{hours} {hours === 1 ? "hour" : "hours"}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-center rounded-[9px] border border-[#E5E7EB] bg-white p-1">
+              <Calendar
+                mode="single"
+                selected={pauseDate}
+                onSelect={setPauseDate}
+                disabled={{ before: new Date(new Date().setHours(0, 0, 0, 0)) }}
+                captionLayout="dropdown"
+              />
+            </div>
+
+            <label className="block space-y-1.5 text-[13px] font-semibold text-[#374151]">
+              Resume time
+              <input
+                type="time"
+                value={pauseTime}
+                onChange={(event) => setPauseTime(event.target.value)}
+                className="h-10 w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[14px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15"
+              />
+            </label>
+
+            {pauseDate && (
+              <div className="flex items-center gap-2 rounded-[8px] bg-[#F8FAFC] px-3 py-2 text-[12px] text-[#475569]">
+                <CalendarClock className="h-4 w-4 text-[#4F46E5]" />
+                Resume on {pauseDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at {pauseTime}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setPauseDialogOpen(false)}
+              disabled={savingPause}
+              className="h-[36px] rounded-[7px] border border-[#E5E7EB] bg-white px-4 text-[13px] font-semibold text-[#374151] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyScheduledPause}
+              disabled={savingPause || !pauseDate || !pauseTime}
+              className="inline-flex h-[36px] items-center gap-2 rounded-[7px] bg-[#B45309] px-4 text-[13px] font-semibold text-white hover:bg-[#92400E] disabled:opacity-50"
+            >
+              <PauseCircle className="h-4 w-4" />
+              {savingPause ? "Scheduling..." : `Pause ${pauseTargetIds.length} server${pauseTargetIds.length === 1 ? "" : "s"}`}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={showCreate}
         onOpenChange={(open) => {
           setShowCreate(open);
@@ -1391,7 +1533,15 @@ function ServersPageContent() {
             </label>
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
               Status
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]">
+              <select
+                value={form.status}
+                onChange={(e) => setForm({
+                  ...form,
+                  status: e.target.value,
+                  pauseUntil: e.target.value === "paused" ? form.pauseUntil : "",
+                })}
+                className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]"
+              >
                 {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
               </select>
             </label>
@@ -1419,10 +1569,35 @@ function ServersPageContent() {
               Daily Volume Limit
               <input type="number" min="0" value={form.dailySendLimit} onChange={(e) => setForm({ ...form, dailySendLimit: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]" />
             </label>
-            <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
-              Pause until
-              <input type="datetime-local" value={form.pauseUntil} onChange={(e) => setForm({ ...form, pauseUntil: e.target.value, status: e.target.value ? "paused" : form.status })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]" />
-            </label>
+            <fieldset className="space-y-1.5 text-[13px] font-medium text-[#374151]">
+              <legend>Pause until</legend>
+              <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-2">
+                <input
+                  type="date"
+                  min={new Date().toISOString().slice(0, 10)}
+                  value={dateTimeParts(form.pauseUntil).date}
+                  onChange={(e) => {
+                    const time = dateTimeParts(form.pauseUntil).time;
+                    setForm({
+                      ...form,
+                      pauseUntil: e.target.value ? `${e.target.value}T${time}` : "",
+                      status: e.target.value ? "paused" : form.status,
+                    });
+                  }}
+                  className="h-[36px] min-w-0 rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]"
+                />
+                <input
+                  type="time"
+                  value={dateTimeParts(form.pauseUntil).time}
+                  disabled={!form.pauseUntil}
+                  onChange={(e) => {
+                    const date = dateTimeParts(form.pauseUntil).date;
+                    setForm({ ...form, pauseUntil: date ? `${date}T${e.target.value}` : form.pauseUntil });
+                  }}
+                  className="h-[36px] min-w-0 rounded-[7px] border border-[#E5E7EB] px-2 text-[13px] disabled:bg-[#F8FAFC] disabled:text-[#9CA3AF]"
+                />
+              </div>
+            </fieldset>
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
               Billing Method
               <select value={form.billingMethod} onChange={(e) => setForm({ ...form, billingMethod: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]">
