@@ -21,6 +21,7 @@ import {
   Grid3X3,
   List,
   MoreHorizontal,
+  PauseCircle,
   Plus,
   RefreshCw,
   Search,
@@ -1040,19 +1041,22 @@ function ServersPageContent() {
               const meta = ipMeta(primaryIp);
               const region = detectedRegion(server);
               return (
-                <article key={server.id} className={`rounded-[10px] border border-[#E5E7EB] p-4 ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}>
+                <article key={server.id} className={`relative overflow-hidden rounded-[10px] border border-[#E5E7EB] p-4 ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}>
                   {remainingPause && (
-                    <div className="mb-3 flex items-center justify-between gap-3 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#92400E]">Paused countdown</p>
-                        <p className="truncate text-[13px] font-semibold text-[#111827]">Resumes in {remainingPause}</p>
+                    <div className="pointer-events-none absolute inset-x-4 top-1/2 z-20 flex -translate-y-1/2 justify-center">
+                      <div className="flex max-w-full items-center gap-3 rounded-[9px] border border-[#F59E0B]/60 bg-white/95 px-4 py-3 shadow-[0_12px_30px_rgba(146,64,14,0.22)] backdrop-blur-sm">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FEF3C7] text-[#B45309]">
+                          <PauseCircle className="h-5 w-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#B45309]">Sending paused</p>
+                          <p className="truncate text-[15px] font-bold tabular-nums text-[#111827]">{remainingPause} remaining</p>
+                          <p className="truncate text-[10px] text-[#6B7280]">Resumes {new Date(server.pauseUntil!).toLocaleString()}</p>
+                        </div>
                       </div>
-                      <button onClick={() => openEdit(server)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[7px] border border-[#FCD34D] bg-white px-2.5 text-[12px] font-semibold text-[#92400E]">
-                        <Edit className="h-3.5 w-3.5" /> Edit
-                      </button>
                     </div>
                   )}
-                  <div className={remainingPause ? "pointer-events-none blur-[2px]" : ""}>
+                  <div className={remainingPause ? "pointer-events-none select-none blur-[3px] opacity-35" : ""}>
                   <div className="flex items-start gap-3">
                     <button onClick={() => toggleRow(server.id)} className="mt-0.5">
                       {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
@@ -1114,18 +1118,20 @@ function ServersPageContent() {
                     <div className="min-w-0 text-[12px] text-[#6B7280]">
                       Assigned: <span className="font-semibold text-[#111827]">{server.assignedUsers?.[0]?.name || "Unassigned"}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#C7D2FE] px-2.5 text-[12px] font-semibold text-[#4F46E5]">
+                  </div>
+                  </div>
+                  <div className="relative z-30 mt-3 flex justify-end">
+                    <div className="inline-flex items-center gap-1 rounded-[8px] bg-white/95 p-1 shadow-sm">
+                      <button onClick={() => openEdit(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#C7D2FE] bg-white px-2.5 text-[12px] font-semibold text-[#4F46E5]">
                         <Edit className="h-3.5 w-3.5" /> Edit
                       </button>
-                      <button onClick={() => schedulePause(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FDE68A] px-2.5 text-[12px] font-semibold text-[#92400E]">
-                        <CalendarClock className="h-3.5 w-3.5" /> Pause
+                      <button onClick={() => schedulePause(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FDE68A] bg-white px-2.5 text-[12px] font-semibold text-[#92400E]">
+                        <CalendarClock className="h-3.5 w-3.5" /> {remainingPause ? "Change" : "Pause"}
                       </button>
-                      <button onClick={() => deleteServer(server)} disabled={deletingServers[server.id]} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FECACA] px-2.5 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">
+                      <button onClick={() => deleteServer(server)} disabled={deletingServers[server.id]} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FECACA] bg-white px-2.5 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">
                         <Trash2 className="h-3.5 w-3.5" /> Delete
                       </button>
                     </div>
-                  </div>
                   </div>
                 </article>
               );
@@ -1173,7 +1179,14 @@ function ServersPageContent() {
                   const meta = ipMeta(primaryIp);
                   const region = detectedRegion(server);
                   return (
-                    <tr key={server.id} className={`border-b border-[#F1F5F9] transition-colors ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}>
+                    <tr
+                      key={server.id}
+                      className={`relative border-b border-[#F1F5F9] transition-colors ${
+                        remainingPause
+                          ? "[&>td:not(:last-child)]:pointer-events-none [&>td:not(:last-child)]:select-none [&>td:not(:last-child)]:blur-[3px] [&>td:not(:last-child)]:opacity-35"
+                          : ""
+                      } ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}
+                    >
                       <td className="px-4 py-3">
                         <button onClick={() => toggleRow(server.id)}>
                           {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
@@ -1181,11 +1194,6 @@ function ServersPageContent() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="min-w-0">
-                          {remainingPause && (
-                            <div className="mb-2 rounded-[7px] border border-[#FDE68A] bg-[#FFFBEB] px-2 py-1 text-[11px] font-bold text-[#92400E]">
-                              Paused - resumes in {remainingPause}
-                            </div>
-                          )}
                           <p className="text-[13px] font-bold text-[#2563EB]">{server.name}</p>
                           <p className="mt-0.5 text-[11px] text-[#6B7280]">{primaryIp?.address ?? server.location ?? "-"}</p>
                           {primaryIp && (
@@ -1299,28 +1307,42 @@ function ServersPageContent() {
                         </div>
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <button
-                          onClick={() => openEdit(server)}
-                          className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#4F46E5] hover:bg-[#EEF2FF]"
-                          title="Edit server"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => schedulePause(server)}
-                          className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#B45309] hover:bg-[#FFFBEB]"
-                          title="Pause with countdown"
-                        >
-                          <CalendarClock className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteServer(server)}
-                          disabled={deletingServers[server.id]}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50"
-                          title="Delete server"
-                        >
-                          {deletingServers[server.id] ? <MoreHorizontal className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-                        </button>
+                        {remainingPause && (
+                          <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-3 rounded-[9px] border border-[#F59E0B]/60 bg-white/95 px-5 py-2.5 text-left shadow-[0_12px_30px_rgba(146,64,14,0.22)] backdrop-blur-sm">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FEF3C7] text-[#B45309]">
+                              <PauseCircle className="h-5 w-5" />
+                            </span>
+                            <div className="whitespace-nowrap">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#B45309]">Sending paused</p>
+                              <p className="text-[14px] font-bold tabular-nums text-[#111827]">{remainingPause} remaining</p>
+                              <p className="text-[10px] text-[#6B7280]">Resumes {new Date(server.pauseUntil!).toLocaleString()}</p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="relative z-30 inline-flex rounded-[7px] bg-white/95 p-0.5 shadow-sm">
+                          <button
+                            onClick={() => openEdit(server)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#4F46E5] hover:bg-[#EEF2FF]"
+                            title="Edit server"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => schedulePause(server)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#B45309] hover:bg-[#FFFBEB]"
+                            title={remainingPause ? "Change pause countdown" : "Pause with countdown"}
+                          >
+                            <CalendarClock className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteServer(server)}
+                            disabled={deletingServers[server.id]}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50"
+                            title="Delete server"
+                          >
+                            {deletingServers[server.id] ? <MoreHorizontal className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
