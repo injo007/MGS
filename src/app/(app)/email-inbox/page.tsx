@@ -50,6 +50,7 @@ interface InboxEmail {
   responseType: string;
   bodyPreview: string;
   bodyText: string;
+  bodyHtml?: string | null;
   seen: boolean;
 }
 
@@ -98,6 +99,25 @@ interface ProviderConversationGroup {
   sentCount: number;
   receivedCount: number;
   sourceEmails: string[];
+}
+
+function EmailBody({ html, text }: { html?: string | null; text?: string | null }) {
+  if (html) {
+    return (
+      <iframe
+        title="Email HTML body"
+        sandbox=""
+        srcDoc={html}
+        className="mt-3 h-[360px] w-full rounded-[8px] border border-[#E5E7EB] bg-white"
+      />
+    );
+  }
+
+  return (
+    <pre className="mt-3 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[8px] border border-[#E5E7EB] bg-white p-3 text-[12px] leading-5 text-[#374151]">
+      {text || "No readable body."}
+    </pre>
+  );
 }
 
 const RESPONSE_TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -550,7 +570,7 @@ export default function EmailInboxPage() {
                       </div>
                       <p className="text-[12px] font-medium text-[#6B7280]">{new Date(email.date).toLocaleString()}</p>
                     </div>
-                    <pre className="mt-3 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[8px] border border-[#E5E7EB] bg-white p-3 text-[12px] leading-5 text-[#374151]">{email.bodyText || email.bodyPreview || "No readable body."}</pre>
+                    <EmailBody html={email.bodyHtml} text={email.bodyText || email.bodyPreview} />
                     <div className="mt-3 flex flex-wrap justify-end gap-2">
                       <button onClick={() => handleApply(email, false)} disabled={!email.matchedProviderId || actionLoading === `apply-${email.uid}`} className="inline-flex h-[30px] items-center gap-1.5 rounded-[7px] bg-[#4F46E5] px-3 text-[12px] font-semibold text-white disabled:opacity-50">
                         {actionLoading === `apply-${email.uid}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}

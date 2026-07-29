@@ -28,6 +28,7 @@ export interface InboxEmail {
   responseType: string;
   bodyPreview: string;
   bodyText: string;
+  bodyHtml?: string | null;
   seen: boolean;
 }
 
@@ -293,7 +294,8 @@ async function parseMessage(
   const parsedTo = addressList(parsed.to);
   const toAddresses = parsedTo.emails;
   const subject = parsed.subject || "(no subject)";
-  const bodyText = (parsed.text || parsed.html || "").replace(/\s+\n/g, "\n").trim();
+  const rawHtml = typeof parsed.html === "string" ? parsed.html.trim() : "";
+  const bodyText = (parsed.text || rawHtml || "").replace(/\s+\n/g, "\n").trim();
   const date = parsed.date || new Date();
   const matchedProvider = direction === "outgoing"
     ? await findProviderForAddresses(toAddresses)
@@ -320,6 +322,7 @@ async function parseMessage(
     responseType,
     bodyPreview: bodyText.slice(0, 300),
     bodyText: bodyText.slice(0, 20000),
+    bodyHtml: rawHtml ? rawHtml.slice(0, 100000) : null,
     seen: flags?.has("\\Seen") ?? false,
   };
 }

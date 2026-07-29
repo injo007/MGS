@@ -133,14 +133,11 @@ function cleanFormNote(value: unknown) {
   return String(value).trim();
 }
 
-type ProviderUserSource = "provider" | "contact" | "server" | "creator";
+type ProviderUserSource = "server";
 type ProviderContactSource = "inbox" | "outreach";
 
 const providerUserSourcePriority: Record<ProviderUserSource, number> = {
-  server: 5,
-  creator: 4,
-  provider: 3,
-  contact: 2,
+  server: 1,
 };
 
 export async function GET(request: Request) {
@@ -271,17 +268,8 @@ export async function GET(request: Request) {
     contactedUsersByProvider.get(providerId)!.set(user.id, { id: user.id, name: user.name, email: user.email, source: user.source });
   };
 
-  for (const provider of data) {
-    addUsageUser(provider.id, {
-      id: provider.assignedUserId,
-      name: provider.assignedUserName,
-      email: provider.assignedUserEmail,
-      source: "provider",
-    });
-  }
-
   if (providerIds.length > 0) {
-    const [serverAssignees, serverCreators, outreachContacts, appUsers, imapAccounts, cachedInbox] = await Promise.all([
+    const [serverAssignees, outreachContacts, appUsers, imapAccounts, cachedInbox] = await Promise.all([
       db
         .select({
           providerId: servers.providerId,
@@ -292,16 +280,6 @@ export async function GET(request: Request) {
         .from(servers)
         .innerJoin(serverUsers, eq(serverUsers.serverId, servers.id))
         .innerJoin(users, eq(users.id, serverUsers.userId))
-        .where(inArray(servers.providerId, providerIds)),
-      db
-        .select({
-          providerId: servers.providerId,
-          userId: users.id,
-          userName: users.name,
-          userEmail: users.email,
-        })
-        .from(servers)
-        .innerJoin(users, eq(users.id, servers.createdById))
         .where(inArray(servers.providerId, providerIds)),
       db
         .select({
@@ -334,20 +312,15 @@ export async function GET(request: Request) {
       const ownerId = mailboxOwnerBySource.get((email.sourceEmail || "").toLowerCase());
       const owner = ownerId ? usersById.get(ownerId) : null;
       if (!owner) continue;
-      addUsageUser(email.matchedProviderId, { id: owner.id, name: owner.name, email: owner.email, source: "contact" });
       addContactedUser(email.matchedProviderId, { id: owner.id, name: owner.name, email: owner.email, source: "inbox" });
     }
 
     for (const row of outreachContacts) {
-      addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "contact" });
       addContactedUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "outreach" });
     }
 
     for (const row of serverAssignees) {
       addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "server" });
-    }
-    for (const row of serverCreators) {
-      addUsageUser(row.providerId, { id: row.userId, name: row.userName, email: row.userEmail, source: "creator" });
     }
   }
 
@@ -360,7 +333,7 @@ export async function GET(request: Request) {
       ...p,
       assignedUsers,
       contactedUsers,
-      assignedUserName: assignedUsers[0]?.name || p.assignedUserName || null,
+      assignedUserName: assignedUsers[0]?.name || null,
       totalServers: Number(p.totalServers || 0),
       activeServers: Number(p.activeServers || 0),
       totalSends: Number(p.totalSends || 0),

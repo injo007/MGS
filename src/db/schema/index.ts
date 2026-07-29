@@ -449,6 +449,7 @@ export const servers = pgTable(
     autoRenewal: boolean("auto_renewal").default(false),
     notes: text("notes"),
     dailySendLimit: integer("daily_send_limit"),
+    pauseUntil: timestamp("pause_until", { withTimezone: true }),
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id),

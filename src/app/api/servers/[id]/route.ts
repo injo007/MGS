@@ -17,7 +17,7 @@ function cleanServerPayload(body: Record<string, unknown>): Partial<typeof serve
     "billingMethod",
     "notes",
   ];
-  const dateFields = ["purchaseDate", "activationDate", "expirationDate"];
+  const dateFields = ["purchaseDate", "activationDate", "expirationDate", "pauseUntil"];
   const cleaned: Record<string, unknown> = { ...body };
 
   for (const field of nullableTextFields) {
@@ -26,7 +26,8 @@ function cleanServerPayload(body: Record<string, unknown>): Partial<typeof serve
 
   for (const field of dateFields) {
     if (typeof cleaned[field] === "string") {
-      cleaned[field] = cleaned[field] ? new Date(`${cleaned[field]}T00:00:00.000Z`) : null;
+      const value = String(cleaned[field]);
+      cleaned[field] = value ? new Date(value.includes("T") ? value : `${value}T00:00:00.000Z`) : null;
     }
   }
 

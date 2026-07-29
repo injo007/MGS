@@ -156,6 +156,7 @@ type ProviderConversationEmail = {
   responseType: string;
   bodyPreview: string;
   bodyText: string;
+  bodyHtml?: string | null;
   seen: boolean;
 };
 
@@ -219,6 +220,21 @@ function formatDateTime(dateStr: string | null | undefined): string {
 
 function stripEmailMarker(message: string | null | undefined): string {
   return (message || "").replace(/\n?\[serverops-email:[^\]]+\]\s*$/g, "").trim();
+}
+
+function EmailBody({ html, text }: { html?: string | null; text?: string | null }) {
+  if (html) {
+    return (
+      <iframe
+        title="Email HTML body"
+        sandbox=""
+        srcDoc={html}
+        className="h-[360px] w-full rounded-b-[7px] border-0 bg-white"
+      />
+    );
+  }
+
+  return <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap px-3 pb-3 text-[12px] leading-5 text-[#374151]">{text || "No readable body."}</pre>;
 }
 
 function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -1021,7 +1037,7 @@ export default function ProviderDetailPage({
               <div className="space-y-3">
                 {conversations.map((email) => {
                   const isIncoming = email.direction === "incoming";
-                  const body = email.bodyText || email.bodyPreview;
+                  const body = email.bodyHtml || email.bodyText || email.bodyPreview;
                   return (
                     <article key={`${email.sourceEmail}:${email.mailbox}:${email.uid}`} className="rounded-[8px] border border-[#E5E7EB] bg-white p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1043,7 +1059,7 @@ export default function ProviderDetailPage({
                       {body && (
                         <details className="mt-3 rounded-[7px] border border-[#F1F5F9] bg-[#F8FAFC]">
                           <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-[#374151]">Email content</summary>
-                          <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap px-3 pb-3 text-[12px] leading-5 text-[#374151]">{body}</pre>
+                          <EmailBody html={email.bodyHtml} text={email.bodyText || email.bodyPreview} />
                         </details>
                       )}
                     </article>

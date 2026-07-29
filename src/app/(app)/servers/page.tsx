@@ -84,6 +84,7 @@ interface ServerRow {
   currency: string | null;
   notes: string | null;
   dailySendLimit: number | null;
+  pauseUntil: string | null;
   createdAt: string;
   updatedAt: string;
   totalSends: number;
@@ -162,6 +163,27 @@ function dateLabel(value: string | null) {
 function daysUntil(value: string | null) {
   if (!value) return null;
   return Math.ceil((new Date(value).getTime() - Date.now()) / 86400000);
+}
+
+function formatDateTimeLocal(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function pauseRemaining(value: string | null, now = Date.now()) {
+  if (!value) return null;
+  const diff = new Date(value).getTime() - now;
+  if (diff <= 0) return null;
+  const totalMinutes = Math.ceil(diff / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }
 
 function serverType(server: ServerRow) {
@@ -309,6 +331,7 @@ function ServersPageContent() {
   const [checkingBlacklist, setCheckingBlacklist] = useState(false);
   const [blacklistProvider, setBlacklistProvider] = useState<BlacklistProvider>("hetrixtools");
   const [deletingStatistics, setDeletingStatistics] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const [form, setForm] = useState({
     providerId: "",
     name: "",
@@ -320,6 +343,7 @@ function ServersPageContent() {
     currency: "USD",
     billingMethod: "monthly",
     dailySendLimit: "",
+    pauseUntil: "",
     purchaseDate: "",
     activationDate: "",
     expirationDate: "",
@@ -402,6 +426,11 @@ function ServersPageContent() {
       })
       .catch(() => {});
   }, [admin, fetchServers]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const refreshBlacklistResult = (event: Event) => {
@@ -614,6 +643,7 @@ function ServersPageContent() {
       currency: "USD",
       billingMethod: "monthly",
       dailySendLimit: "",
+      pauseUntil: "",
       purchaseDate: "",
       activationDate: "",
       expirationDate: "",
@@ -643,6 +673,7 @@ function ServersPageContent() {
       currency: server.currency || "USD",
       billingMethod: server.billingMethod || "monthly",
       dailySendLimit: server.dailySendLimit != null ? String(server.dailySendLimit) : "",
+      pauseUntil: formatDateTimeLocal(server.pauseUntil),
       purchaseDate: server.purchaseDate ? server.purchaseDate.slice(0, 10) : "",
       activationDate: server.activationDate ? server.activationDate.slice(0, 10) : "",
       expirationDate: server.expirationDate ? server.expirationDate.slice(0, 10) : "",
@@ -661,13 +692,44 @@ function ServersPageContent() {
       const res = await fetch(`/api/servers/${server.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, pauseUntil: status === "paused" ? server.pauseUntil : null }),
       });
       if (!res.ok) throw new Error(await res.text());
       toast.success("Server status updated");
       fetchServers();
     } catch {
       toast.error("Failed to update server status");
+    } finally {
+      setSavingStatuses((state) => ({ ...state, [server.id]: false }));
+    }
+  };
+
+  const schedulePause = async (server: ServerRow) => {
+    const value = window.prompt("Pause duration in hours, or exact resume date/time like 2026-07-30 09:00");
+    if (!value) return;
+    const trimmed = value.trim();
+    const hours = Number(trimmed);
+    const resumeAt = Number.isFinite(hours) && hours > 0
+      ? new Date(Date.now() + hours * 3600000)
+      : new Date(trimmed.replace(" ", "T"));
+
+    if (Number.isNaN(resumeAt.getTime()) || resumeAt.getTime() <= Date.now()) {
+      toast.error("Enter a future pause duration or date/time");
+      return;
+    }
+
+    setSavingStatuses((state) => ({ ...state, [server.id]: true }));
+    try {
+      const res = await fetch(`/api/servers/${server.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "paused", pauseUntil: resumeAt.toISOString() }),
+      });
+      if (!res.ok) throw new Error("Failed to schedule pause");
+      toast.success(`Server paused until ${resumeAt.toLocaleString()}`);
+      fetchServers();
+    } catch {
+      toast.error("Failed to schedule pause");
     } finally {
       setSavingStatuses((state) => ({ ...state, [server.id]: false }));
     }
@@ -759,6 +821,7 @@ function ServersPageContent() {
           currency: form.currency || "USD",
           billingMethod: form.billingMethod || null,
           dailySendLimit: form.dailySendLimit ? Number(form.dailySendLimit) : null,
+          pauseUntil: form.pauseUntil || null,
           purchaseDate: form.purchaseDate || null,
           activationDate: form.activationDate || null,
           expirationDate: form.expirationDate || null,
@@ -972,11 +1035,24 @@ function ServersPageContent() {
             paginated.map((server) => {
               const selectedRow = selected.includes(server.id);
               const renewalDays = daysUntil(server.expirationDate);
+              const remainingPause = pauseRemaining(server.pauseUntil, now);
               const primaryIp = server.ips?.[0];
               const meta = ipMeta(primaryIp);
               const region = detectedRegion(server);
               return (
                 <article key={server.id} className={`rounded-[10px] border border-[#E5E7EB] p-4 ${serverRowTone(server.status, selectedRow)} ${serverExpiryTone(renewalDays)}`}>
+                  {remainingPause && (
+                    <div className="mb-3 flex items-center justify-between gap-3 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#92400E]">Paused countdown</p>
+                        <p className="truncate text-[13px] font-semibold text-[#111827]">Resumes in {remainingPause}</p>
+                      </div>
+                      <button onClick={() => openEdit(server)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[7px] border border-[#FCD34D] bg-white px-2.5 text-[12px] font-semibold text-[#92400E]">
+                        <Edit className="h-3.5 w-3.5" /> Edit
+                      </button>
+                    </div>
+                  )}
+                  <div className={remainingPause ? "pointer-events-none blur-[2px]" : ""}>
                   <div className="flex items-start gap-3">
                     <button onClick={() => toggleRow(server.id)} className="mt-0.5">
                       {selectedRow ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
@@ -1042,10 +1118,14 @@ function ServersPageContent() {
                       <button onClick={() => openEdit(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#C7D2FE] px-2.5 text-[12px] font-semibold text-[#4F46E5]">
                         <Edit className="h-3.5 w-3.5" /> Edit
                       </button>
+                      <button onClick={() => schedulePause(server)} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FDE68A] px-2.5 text-[12px] font-semibold text-[#92400E]">
+                        <CalendarClock className="h-3.5 w-3.5" /> Pause
+                      </button>
                       <button onClick={() => deleteServer(server)} disabled={deletingServers[server.id]} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FECACA] px-2.5 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">
                         <Trash2 className="h-3.5 w-3.5" /> Delete
                       </button>
                     </div>
+                  </div>
                   </div>
                 </article>
               );
@@ -1088,6 +1168,7 @@ function ServersPageContent() {
                 paginated.map((server) => {
                   const renewalDays = daysUntil(server.expirationDate);
                   const selectedRow = selected.includes(server.id);
+                  const remainingPause = pauseRemaining(server.pauseUntil, now);
                   const primaryIp = server.ips?.[0];
                   const meta = ipMeta(primaryIp);
                   const region = detectedRegion(server);
@@ -1100,6 +1181,11 @@ function ServersPageContent() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="min-w-0">
+                          {remainingPause && (
+                            <div className="mb-2 rounded-[7px] border border-[#FDE68A] bg-[#FFFBEB] px-2 py-1 text-[11px] font-bold text-[#92400E]">
+                              Paused - resumes in {remainingPause}
+                            </div>
+                          )}
                           <p className="text-[13px] font-bold text-[#2563EB]">{server.name}</p>
                           <p className="mt-0.5 text-[11px] text-[#6B7280]">{primaryIp?.address ?? server.location ?? "-"}</p>
                           {primaryIp && (
@@ -1221,6 +1307,13 @@ function ServersPageContent() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
+                          onClick={() => schedulePause(server)}
+                          className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#B45309] hover:bg-[#FFFBEB]"
+                          title="Pause with countdown"
+                        >
+                          <CalendarClock className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => deleteServer(server)}
                           disabled={deletingServers[server.id]}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50"
@@ -1303,6 +1396,10 @@ function ServersPageContent() {
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
               Daily Volume Limit
               <input type="number" min="0" value={form.dailySendLimit} onChange={(e) => setForm({ ...form, dailySendLimit: e.target.value })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]" />
+            </label>
+            <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
+              Pause until
+              <input type="datetime-local" value={form.pauseUntil} onChange={(e) => setForm({ ...form, pauseUntil: e.target.value, status: e.target.value ? "paused" : form.status })} className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]" />
             </label>
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">
               Billing Method

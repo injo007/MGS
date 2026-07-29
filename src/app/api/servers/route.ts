@@ -20,7 +20,7 @@ function cleanServerPayload(body: Record<string, unknown>): Partial<typeof serve
     "billingMethod",
     "notes",
   ];
-  const dateFields = ["purchaseDate", "activationDate", "expirationDate"];
+  const dateFields = ["purchaseDate", "activationDate", "expirationDate", "pauseUntil"];
   const cleaned: Record<string, unknown> = { ...body };
 
   for (const field of nullableTextFields) {
@@ -29,7 +29,8 @@ function cleanServerPayload(body: Record<string, unknown>): Partial<typeof serve
 
   for (const field of dateFields) {
     if (typeof cleaned[field] === "string") {
-      cleaned[field] = cleaned[field] ? new Date(`${cleaned[field]}T00:00:00.000Z`) : null;
+      const value = String(cleaned[field]);
+      cleaned[field] = value ? new Date(value.includes("T") ? value : `${value}T00:00:00.000Z`) : null;
     }
   }
 
@@ -111,6 +112,13 @@ async function recordManualProviderContact({
     entityId: created.id,
     newValue: created,
   });
+}
+
+async function resumeExpiredPausedServers() {
+  await db
+    .update(servers)
+    .set({ status: "active", pauseUntil: null, updatedAt: new Date() })
+    .where(sql`${servers.status} = 'paused' and ${servers.pauseUntil} is not null and ${servers.pauseUntil} <= now()`);
 }
 
 async function syncServerIpAddresses(serverId: string, providerId: string, addresses: string[] | null) {
@@ -209,6 +217,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  await resumeExpiredPausedServers();
+
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") || "";
   const page = parseInt(searchParams.get("page") || "1", 10);
@@ -273,6 +283,7 @@ export async function GET(request: Request) {
         storage: servers.storage,
         bandwidth: servers.bandwidth,
         notes: servers.notes,
+        pauseUntil: servers.pauseUntil,
         dailySendLimit: servers.dailySendLimit,
         createdAt: servers.createdAt,
         updatedAt: servers.updatedAt,
