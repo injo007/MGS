@@ -72,7 +72,7 @@ interface Provider {
     id: string;
     name: string;
     email: string;
-    source: "inbox" | "outreach" | "fallback";
+    source: "inbox" | "outreach";
   }>;
   lastContactDate: string | null;
   totalServers: number;
@@ -714,7 +714,7 @@ export default function ProvidersPage() {
                           {provider.contactedUsers.slice(0, 3).map((user) => (
                             <span
                               key={user.id}
-                              title={`${user.name} · ${user.source === "inbox" ? "synced inbox" : user.source === "outreach" ? "outreach/contact log" : "contacted status fallback"}`}
+                              title={`${user.name} · ${user.source === "inbox" ? "synced inbox" : "outreach/contact log"}`}
                               className={`inline-flex items-center gap-1 rounded-[999px] px-2 py-0.5 text-[11px] font-semibold ${contactedUserChipClass(user.source)}`}
                             >
                               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[8px]">
