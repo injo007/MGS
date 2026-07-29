@@ -168,6 +168,8 @@ function NewProviderForm() {
   const editId = searchParams.get("edit");
   const isEditMode = !!editId;
   const isAdmin = String((session?.user as Record<string, unknown> | undefined)?.roleName || "").toLowerCase() === "admin";
+  const currentUserId = String((session?.user as Record<string, unknown> | undefined)?.id || "");
+  const currentUserName = String((session?.user as Record<string, unknown> | undefined)?.name || "Me");
 
   const [isSaving, setIsSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(!!editId);
@@ -201,13 +203,22 @@ function NewProviderForm() {
   });
 
   useEffect(() => {
+    if (!session?.user) return;
+
+    if (!isAdmin) {
+      setUsers(currentUserId ? [{ id: currentUserId, name: currentUserName }] : []);
+      return;
+    }
+
     fetch("/api/users?pageSize=100")
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (json?.data) setUsers(json.data);
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (currentUserId) setUsers([{ id: currentUserId, name: currentUserName }]);
+      });
+  }, [currentUserId, currentUserName, isAdmin, session?.user]);
 
   useEffect(() => {
     if (!editId) return;
@@ -228,7 +239,9 @@ function NewProviderForm() {
             formatted[key] = val;
           }
         }
-        setInitialManualContactedByUserId(textOrEmpty(formatted.manualContactedByUserId));
+        const rawManualContactedByUserId = textOrEmpty(formatted.manualContactedByUserId);
+        formatted.manualContactedByUserId = isAdmin || rawManualContactedByUserId === currentUserId ? rawManualContactedByUserId : "";
+        setInitialManualContactedByUserId(rawManualContactedByUserId);
         form.reset(normalizeProviderFormData(formatted));
       })
       .catch((err) => {
@@ -237,7 +250,7 @@ function NewProviderForm() {
       .finally(() => {
         setLoadingEdit(false);
       });
-  }, [editId, form]);
+  }, [currentUserId, editId, form, isAdmin]);
 
   const onSubmit = async (data: ProviderFormData) => {
     setIsSaving(true);
@@ -245,7 +258,7 @@ function NewProviderForm() {
       const url = isEditMode ? `/api/providers/${editId}` : "/api/providers";
       const method = isEditMode ? "PUT" : "POST";
       const payload = buildProviderPayload(data);
-      if (!isEditMode || !isAdmin || !data.manualContactedByUserId || data.manualContactedByUserId === initialManualContactedByUserId) {
+      if (!isEditMode || !data.manualContactedByUserId || data.manualContactedByUserId === initialManualContactedByUserId) {
         delete payload.manualContactedByUserId;
       }
       const res = await fetch(url, {
@@ -704,7 +717,7 @@ function NewProviderForm() {
                   ))}
                 </select>
               </div>
-              {isEditMode && isAdmin && (
+              {isEditMode && (
                 <div className="space-y-1.5">
                   <label className="text-[13px] font-medium text-[#374151]">Contacted By</label>
                   <select
@@ -714,11 +727,12 @@ function NewProviderForm() {
                   >
                     <option value="">Not set manually</option>
                     {users.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
+                      <option key={u.id} value={u.id}>{u.id === currentUserId ? `Me (${u.name})` : u.name}</option>
                     ))}
                   </select>
                   <p className="text-[12px] text-[#6B7280]">
                     Use this when the provider was contacted through a website form or ticket instead of a synced email conversation.
+                    {!isAdmin ? " You can record yourself only." : ""}
                   </p>
                 </div>
               )}

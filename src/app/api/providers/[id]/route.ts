@@ -276,8 +276,8 @@ export async function PUT(
   }
 
   const manualContactedByUserId = cleanManualContactUserId(body.manualContactedByUserId);
-  if (manualContactedByUserId && !isAdmin(session)) {
-    return forbidden("Only admins can manually set who contacted a provider.");
+  if (manualContactedByUserId && !isAdmin(session) && manualContactedByUserId !== sessionUserId(session)) {
+    return forbidden("Users can only record themselves as the provider contact.");
   }
 
   const countryProvided = Object.prototype.hasOwnProperty.call(body, "country");
