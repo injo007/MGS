@@ -53,6 +53,7 @@ export const SERVER_STATUSES = [
   { value: "tss09_error", label: "TSS09" },
   { value: "bounce", label: "Bounce" },
   { value: "complaint", label: "Complaint" },
+  { value: "archived", label: "Archived" },
 ] as const;
 
 export const PROVIDER_STATUSES = {

@@ -37,11 +37,15 @@ async function upsertDailyLog({
   serverId,
   day,
   actualSends,
+  operationalStatus,
+  deliveryNotes,
   sessionId,
 }: {
   serverId: string;
   day: string;
-  actualSends: number;
+  actualSends?: number;
+  operationalStatus?: string;
+  deliveryNotes?: string;
   sessionId: string;
 }) {
   const [server] = await db
@@ -85,21 +89,22 @@ async function upsertDailyLog({
 
   const primary = existing[0];
   const bounces = Number(primary?.bounces || 0);
-  const successfulSends = Math.max(0, actualSends - bounces);
+  const resolvedActualSends = actualSends ?? Number(primary?.actualSends || 0);
+  const successfulSends = Math.max(0, resolvedActualSends - bounces);
   const payload = {
     date: new Date(`${day}T12:00:00.000Z`),
     mailerId: primary?.mailerId || userId || sessionId,
     providerId: server.providerId,
     serverId,
     ipAddressId: primary?.ipAddressId || ip.id,
-    plannedSends: server.dailySendLimit ?? actualSends,
-    actualSends,
+    plannedSends: server.dailySendLimit ?? resolvedActualSends,
+    actualSends: resolvedActualSends,
     successfulSends,
     bounces,
     complaints: Number(primary?.complaints || 0),
     unsubscribes: Number(primary?.unsubscribes || 0),
-    operationalStatus: primary?.operationalStatus || "normal",
-    deliveryNotes: primary?.deliveryNotes || "Updated from Server Statistics Center",
+    operationalStatus: operationalStatus?.trim() || primary?.operationalStatus || "normal",
+    deliveryNotes: deliveryNotes?.trim() || primary?.deliveryNotes || "Updated from Server Statistics Center",
     updatedAt: new Date(),
   };
 
@@ -141,15 +146,23 @@ export async function POST(request: Request) {
     : body.serverId
       ? [String(body.serverId)]
       : [];
-  const actualSends = Number(body.actualSends);
+  const actualSends = body.actualSends == null || body.actualSends === "" ? undefined : Number(body.actualSends);
+  const operationalStatus = typeof body.operationalStatus === "string" ? body.operationalStatus.trim() : undefined;
+  const deliveryNotes = typeof body.deliveryNotes === "string" ? body.deliveryNotes : undefined;
   const days = body.startDate && body.endDate
     ? dateRange(String(body.startDate), String(body.endDate))
     : body.date
       ? [String(body.date).slice(0, 10)]
       : [];
 
-  if (serverIds.length === 0 || days.length === 0 || !Number.isFinite(actualSends) || actualSends < 0) {
-    return NextResponse.json({ error: "serverIds, date or date range, and a non-negative actualSends number are required" }, { status: 400 });
+  if (serverIds.length === 0 || days.length === 0) {
+    return NextResponse.json({ error: "serverIds and a date or date range are required" }, { status: 400 });
+  }
+  if (actualSends != null && (!Number.isFinite(actualSends) || actualSends < 0)) {
+    return NextResponse.json({ error: "actualSends must be a non-negative number" }, { status: 400 });
+  }
+  if (actualSends == null && !operationalStatus && !deliveryNotes?.trim()) {
+    return NextResponse.json({ error: "Provide at least one daily statistic to update" }, { status: 400 });
   }
 
   for (const serverId of serverIds) {
@@ -165,6 +178,8 @@ export async function POST(request: Request) {
         serverId,
         day,
         actualSends,
+        operationalStatus,
+        deliveryNotes,
         sessionId: sessionUserId(session),
       }));
     }
@@ -178,6 +193,8 @@ export async function POST(request: Request) {
       serverIds,
       days,
       actualSends,
+      operationalStatus,
+      deliveryNotes,
       results,
     },
   });

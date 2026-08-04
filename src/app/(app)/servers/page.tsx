@@ -132,6 +132,8 @@ function serverRowTone(status: string, selected: boolean) {
       return "border-l-4 border-l-[#F59E0B] bg-white shadow-[inset_8px_0_14px_-16px_rgba(245,158,11,0.5)] hover:bg-[#F8FAFC]";
     case "paused":
       return "border-l-4 border-l-[#94A3B8] bg-white shadow-[inset_8px_0_14px_-16px_rgba(100,116,139,0.4)] hover:bg-[#F8FAFC]";
+    case "archived":
+      return "border-l-4 border-l-[#6B7280] bg-[#F9FAFB] shadow-[inset_8px_0_14px_-16px_rgba(75,85,99,0.45)] hover:bg-[#F8FAFC]";
     case "public":
       return "border-l-4 border-l-[#3B82F6] bg-white shadow-[inset_8px_0_14px_-16px_rgba(59,130,246,0.5)] hover:bg-[#F8FAFC]";
     case "port_closed":
@@ -341,7 +343,7 @@ function ServersPageContent() {
   const [checkingBlacklist, setCheckingBlacklist] = useState(false);
   const [blacklistProvider, setBlacklistProvider] = useState<BlacklistProvider>("hetrixtools");
   const [deletingStatistics, setDeletingStatistics] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [pauseTargetIds, setPauseTargetIds] = useState<string[]>([]);
   const [pauseDate, setPauseDate] = useState<Date | undefined>();
@@ -459,6 +461,8 @@ function ServersPageContent() {
   const regions = useMemo(() => Array.from(new Set(servers.map((s) => detectedRegion(s)).filter(Boolean))) as string[], [servers]);
   const types = useMemo(() => Array.from(new Set(servers.map(serverType).filter(Boolean))), [servers]);
   const billingCycles = useMemo(() => Array.from(new Set(servers.map((s) => s.billingMethod).filter(Boolean))) as string[], [servers]);
+  const visibleTabs = useMemo(() => admin ? TABS : TABS.filter((tab) => tab.key !== "archived"), [admin]);
+  const visibleServerStatuses = useMemo(() => admin ? SERVER_STATUSES : SERVER_STATUSES.filter((status) => status.value !== "archived"), [admin]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -466,7 +470,8 @@ function ServersPageContent() {
       const renewalDays = daysUntil(server.expirationDate);
       if (activeTab === "expiring" && !(renewalDays !== null && renewalDays <= 45)) return false;
       if (activeTab === "pending" && server.status !== "pending") return false;
-      if (activeTab === "archived" && !["cancelled", "expired", "suspended"].includes(server.status)) return false;
+      if (activeTab === "archived" && server.status !== "archived") return false;
+      if (activeTab !== "archived" && statusFilter !== "archived" && server.status === "archived") return false;
       if (providerFilter !== "all" && server.providerId !== providerFilter) return false;
       if (statusFilter !== "all" && server.status !== statusFilter) return false;
       const region = detectedRegion(server);
@@ -490,18 +495,19 @@ function ServersPageContent() {
     setSelected([]);
   }, [activeTab, providerFilter, statusFilter, regionFilter, typeFilter, billingFilter, assignedFilter, search]);
 
-  const activeCount = servers.filter((server) => server.status === "active").length;
-  const pendingRenewals = servers.filter((server) => {
+  const nonArchivedServers = useMemo(() => servers.filter((server) => server.status !== "archived"), [servers]);
+  const activeCount = nonArchivedServers.filter((server) => server.status === "active").length;
+  const pendingRenewals = nonArchivedServers.filter((server) => {
     const days = daysUntil(server.expirationDate);
     return days !== null && days <= 45;
   }).length;
-  const monthlyCost = servers.reduce((sum, server) => sum + Number(server.monthlyCost || 0), 0);
+  const monthlyCost = nonArchivedServers.reduce((sum, server) => sum + Number(server.monthlyCost || 0), 0);
 
   const tabCount = (key: string) => {
-    if (key === "all") return servers.length;
+    if (key === "all") return nonArchivedServers.length;
     if (key === "expiring") return pendingRenewals;
     if (key === "pending") return servers.filter((server) => server.status === "pending").length;
-    return servers.filter((server) => ["cancelled", "expired", "suspended"].includes(server.status)).length;
+    return servers.filter((server) => server.status === "archived").length;
   };
 
   const toggleRow = (id: string) => {
@@ -545,16 +551,16 @@ function ServersPageContent() {
   };
 
   const deleteServer = async (server: ServerRow) => {
-    if (!window.confirm(`Delete server "${server.name}"? This will also remove its daily statistics and IP assignments.`)) return;
+    if (!window.confirm(`Archive server "${server.name}"? Users will no longer see it, but admins can restore it from Archived.`)) return;
     setDeletingServers((state) => ({ ...state, [server.id]: true }));
     try {
       const res = await fetch(`/api/servers/${server.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(await res.text());
-      toast.success("Server deleted");
+      toast.success("Server archived");
       setSelected((current) => current.filter((id) => id !== server.id));
       fetchServers();
     } catch {
-      toast.error("Failed to delete server");
+      toast.error("Failed to archive server");
     } finally {
       setDeletingServers((state) => ({ ...state, [server.id]: false }));
     }
@@ -562,10 +568,10 @@ function ServersPageContent() {
 
   const deleteSelectedServers = async () => {
     if (selected.length === 0) return;
-    if (!window.confirm(`Delete ${selected.length} selected server${selected.length === 1 ? "" : "s"}? This will also remove their daily statistics and IP assignments.`)) return;
-    const confirmation = window.prompt(`Type DELETE ${selected.length} to confirm deleting the selected server${selected.length === 1 ? "" : "s"}.`);
-    if (confirmation !== `DELETE ${selected.length}`) {
-      toast.info("Server deletion cancelled");
+    if (!window.confirm(`Archive ${selected.length} selected server${selected.length === 1 ? "" : "s"}? Users will no longer see them, but admins can restore them from Archived.`)) return;
+    const confirmation = window.prompt(`Type ARCHIVE ${selected.length} to confirm archiving the selected server${selected.length === 1 ? "" : "s"}.`);
+    if (confirmation !== `ARCHIVE ${selected.length}`) {
+      toast.info("Server archive cancelled");
       return;
     }
     try {
@@ -575,11 +581,11 @@ function ServersPageContent() {
           if (!res.ok) throw new Error(await res.text());
         })
       );
-      toast.success("Selected servers deleted");
+      toast.success("Selected servers archived");
       setSelected([]);
       fetchServers();
     } catch {
-      toast.error("Failed to delete selected servers");
+      toast.error("Failed to archive selected servers");
     }
   };
 
@@ -931,15 +937,15 @@ function ServersPageContent() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total Servers" value={String(servers.length)} sub="+ real inventory" icon={Server} tone="violet" />
-        <KpiCard label="Active Servers" value={String(activeCount)} sub={`${servers.length ? ((activeCount / servers.length) * 100).toFixed(1) : "0.0"}% active`} icon={CheckSquare} tone="green" />
+        <KpiCard label="Total Servers" value={String(nonArchivedServers.length)} sub="+ real inventory" icon={Server} tone="violet" />
+        <KpiCard label="Active Servers" value={String(activeCount)} sub={`${nonArchivedServers.length ? ((activeCount / nonArchivedServers.length) * 100).toFixed(1) : "0.0"}% active`} icon={CheckSquare} tone="green" />
         <KpiCard label="Pending Renewals" value={String(pendingRenewals)} sub="within 45 days" icon={CalendarClock} tone="amber" />
-        <KpiCard label="Monthly Cost" value={money(monthlyCost)} sub={`${servers.length} tracked servers`} icon={Wallet} tone="blue" />
+        <KpiCard label="Monthly Cost" value={money(monthlyCost)} sub={`${nonArchivedServers.length} tracked servers`} icon={Wallet} tone="blue" />
       </div>
 
       <div className="rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <div className="flex overflow-x-auto border-b border-[#E5E7EB] px-4">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
@@ -961,7 +967,7 @@ function ServersPageContent() {
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-[34px] min-w-[140px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
             <option value="all">All Statuses</option>
-            {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+            {visibleServerStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
           </select>
           <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="h-[34px] min-w-[130px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] max-sm:flex-1">
             <option value="all">All Regions</option>
@@ -1066,6 +1072,7 @@ function ServersPageContent() {
             <option value="tss05_error">Mark TSS05</option>
             <option value="tss09_error">Mark TSS09</option>
             <option value="bounce">Mark Bounce</option>
+            {admin && <option value="archived">Archive</option>}
           </select>
           <button
             disabled={selected.length === 0 || deletingStatistics}
@@ -1080,7 +1087,7 @@ function ServersPageContent() {
             className="inline-flex h-[30px] items-center gap-1.5 rounded-[7px] border border-[#FECACA] bg-white px-3 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Delete selected
+            Archive selected
           </button>
         </div>
 
@@ -1193,7 +1200,7 @@ function ServersPageContent() {
                         <CalendarClock className="h-3.5 w-3.5" /> {remainingPause ? "Change" : "Pause"}
                       </button>
                       <button onClick={() => deleteServer(server)} disabled={deletingServers[server.id]} className="inline-flex h-8 items-center gap-1 rounded-[7px] border border-[#FECACA] bg-white px-2.5 text-[12px] font-semibold text-[#DC2626] disabled:opacity-50">
-                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                        <Trash2 className="h-3.5 w-3.5" /> Archive
                       </button>
                     </div>
                   </div>
@@ -1287,7 +1294,7 @@ function ServersPageContent() {
                           disabled={savingStatuses[server.id]}
                           className="h-[30px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#374151] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
                         >
-                          {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                          {visibleServerStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-3">
@@ -1402,7 +1409,7 @@ function ServersPageContent() {
                             onClick={() => deleteServer(server)}
                             disabled={deletingServers[server.id]}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50"
-                            title="Delete server"
+                            title="Archive server"
                           >
                             {deletingServers[server.id] ? <MoreHorizontal className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                           </button>
@@ -1542,7 +1549,7 @@ function ServersPageContent() {
                 })}
                 className="h-[36px] w-full rounded-[7px] border border-[#E5E7EB] px-3 text-[13px]"
               >
-                {SERVER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                {visibleServerStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
               </select>
             </label>
             <label className="space-y-1.5 text-[13px] font-medium text-[#374151]">

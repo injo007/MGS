@@ -167,6 +167,9 @@ export async function GET(
   if (!server) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (server.status === "archived" && !isAdmin(session)) {
+    return forbidden("Archived servers are available to admins only.");
+  }
   if (!(await canAccessServer(session, id))) {
     return forbidden("You can only access servers assigned to you.");
   }
@@ -248,12 +251,18 @@ export async function PUT(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const admin = isAdmin(session);
+  if (existing.status === "archived" && !admin) {
+    return forbidden("Archived servers can only be edited by admins.");
+  }
   if (!(await canAccessServer(session, id))) {
     return forbidden("You can only edit servers assigned to you.");
   }
 
-  const admin = isAdmin(session);
   const { assignedUserIds, ipAddresses: ipAddressValues, manualContactedByUserId, ...serverData } = body;
+  if (serverData.status === "archived" && !admin) {
+    return forbidden("Only admins can set a server to archived.");
+  }
   if (typeof serverData.status === "string" && serverData.status !== "paused") {
     serverData.pauseUntil = null;
   }
@@ -338,24 +347,28 @@ export async function DELETE(
     return forbidden("You can only delete servers assigned to you.");
   }
 
-  await db.delete(sendingLogs).where(eq(sendingLogs.serverId, id));
-  await db.delete(servers).where(eq(servers.id, id));
+  const [updated] = await db
+    .update(servers)
+    .set({ status: "archived", updatedAt: new Date() })
+    .where(eq(servers.id, id))
+    .returning();
 
   await db.insert(auditLogs).values({
     userId: session.user.id,
-    action: "delete",
+    action: "archive",
     entityType: "server",
     entityId: id,
     previousValue: existing,
+    newValue: updated,
   });
 
   await sendAuditTelegramAlert({
-    action: "delete",
+    action: "archive",
     entityType: "server",
     actorName: session.user.name,
     actorEmail: session.user.email,
     entityName: existing.name,
-    entityDetail: existing.location || existing.status || null,
+    entityDetail: existing.location || "Archived",
   });
 
   return new NextResponse(null, { status: 204 });

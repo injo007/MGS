@@ -5,7 +5,7 @@ import type { ComponentType } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ProviderLogo } from "@/components/shared/provider-logo";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { getStatusConfig, StatusBadge } from "@/components/shared/status-badge";
 import {
   AlertTriangle,
   Activity,
@@ -35,6 +35,7 @@ import {
   Cell,
   Pie,
   PieChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -90,6 +91,21 @@ interface SendingItem {
   deliveryNotes: string | null;
 }
 
+type ScheduleIssueTone = "orange" | "red" | "violet" | "blue" | "slate";
+
+interface ScheduleIssue {
+  label: string;
+  count: number;
+  tone: ScheduleIssueTone;
+}
+
+type ScheduleCellTone = string;
+
+type DailyStatusOption = {
+  value: string;
+  label: string;
+};
+
 const PAGE_SIZE = 10;
 const BASE_TABS = [
   { key: "all", label: "All Servers" },
@@ -99,6 +115,18 @@ const BASE_TABS = [
 ];
 const WARMUP_TAB = { key: "warmup", label: "Warmup" };
 const USER_CHART_COLORS = ["#4F46E5", "#16A34A", "#EA580C", "#0891B2", "#8B5CF6", "#DC2626"];
+const DAILY_STATUS_OPTIONS: DailyStatusOption[] = [
+  { value: "normal", label: "Normal" },
+  { value: "active", label: "Active" },
+  { value: "watch", label: "Watch" },
+  { value: "paused", label: "Paused" },
+  { value: "suspended", label: "Suspended" },
+  { value: "ts04_error", label: "TSS04" },
+  { value: "tss07_error", label: "TSS07" },
+  { value: "tss09_error", label: "TSS09" },
+  { value: "bounce", label: "Bounce" },
+  { value: "complaint", label: "Complaint" },
+];
 type AlertFilter = "all" | "bounce" | "ts04" | "capacity" | null;
 type StatsRangeKey = "week" | "currentMonth" | "lastMonth" | "custom";
 
@@ -135,6 +163,73 @@ function pct(numerator: number, denominator: number, precision = 1) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(Math.round(value));
+}
+
+function normalizeOperationalStatus(value: string | null | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
+function statusDotColor(value: string | null | undefined) {
+  const variant = getStatusConfig(value).variant;
+  return {
+    success: "#16A34A",
+    warning: "#EA580C",
+    danger: "#DC2626",
+    info: "#2563EB",
+    replied: "#7C3AED",
+    negotiating: "#D97706",
+    default: "#4F46E5",
+    muted: "#94A3B8",
+  }[variant];
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(79,70,229,${alpha})`;
+  const value = Number.parseInt(normalized, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function collectScheduleIssues(log: Pick<SendingItem, "actualSends" | "bounces" | "complaints" | "unsubscribes" | "operationalStatus" | "deliveryNotes">) {
+  const issues: ScheduleIssue[] = [];
+  const sent = Number(log.actualSends || 0);
+  const bounces = Number(log.bounces || 0);
+  const complaints = Number(log.complaints || 0);
+  const unsubscribes = Number(log.unsubscribes || 0);
+  const status = normalizeOperationalStatus(log.operationalStatus);
+  const notes = (log.deliveryNotes || "").toLowerCase();
+
+  const addIssue = (label: string, count: number, tone: ScheduleIssueTone) => {
+    const existing = issues.find((issue) => issue.label === label);
+    if (existing) {
+      existing.count += count;
+      return;
+    }
+    issues.push({ label, count, tone });
+  };
+
+  if (notes.includes("ts04") || notes.includes("tss04") || notes.includes("ts004") || status.includes("ts04") || status.includes("tss04")) {
+    addIssue("TS004", Math.max(1, Math.round(Math.max(bounces, sent * 0.01))), "orange");
+  }
+  if (notes.includes("tss09") || notes.includes("ts09") || status.includes("tss09")) {
+    addIssue("TSS09", Math.max(1, Math.round(Math.max(bounces, sent * 0.005))), "violet");
+  }
+  if (notes.includes("tss07") || notes.includes("ts07") || status.includes("tss07")) {
+    addIssue("TSS07", 1, "red");
+  }
+  if (notes.includes("spamcop") || notes.includes("paused") || status === "paused") {
+    addIssue(notes.includes("spamcop") ? "Paused/Spamcop" : "Paused", 1, "blue");
+  }
+  if (status === "suspended") addIssue("Suspended", 1, "red");
+  if (status === "down" || status === "port_closed") addIssue(status === "down" ? "Down" : "Port Closed", 1, "red");
+  if (bounces > 0) addIssue("Bounce", bounces, "red");
+  if (complaints > 0) addIssue("Complaint", complaints, "violet");
+  if (unsubscribes > 0) addIssue("Unsub", unsubscribes, "slate");
+
+  return issues;
 }
 
 function dateKey(date: Date) {
@@ -270,6 +365,11 @@ export default function SendingPage() {
   const [statsLogs, setStatsLogs] = useState<SendingItem[]>([]);
   const [loadingStatsLogs, setLoadingStatsLogs] = useState(false);
   const [rangeDailyDrafts, setRangeDailyDrafts] = useState<Record<string, string>>({});
+  const [rangeStatusDrafts, setRangeStatusDrafts] = useState<Record<string, string>>({});
+  const [scheduleDailyDrafts, setScheduleDailyDrafts] = useState<Record<string, string>>({});
+  const [scheduleCellColors, setScheduleCellColors] = useState<Record<string, ScheduleCellTone>>({});
+  const [scheduleCellFontColors, setScheduleCellFontColors] = useState<Record<string, ScheduleCellTone>>({});
+  const [selectedScheduleCell, setSelectedScheduleCell] = useState<string | null>(null);
   const [warmupEnabled, setWarmupEnabled] = useState(false);
   const [autoThrottle, setAutoThrottle] = useState<Record<string, boolean>>({});
   const [drawerForm, setDrawerForm] = useState({
@@ -392,6 +492,7 @@ export default function SendingPage() {
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const allFilteredServersSelected = filtered.length > 0 && filtered.every((server) => selected.includes(server.id));
   let selectedStatsAnchorId: string | null = null;
   for (let index = paginated.length - 1; index >= 0; index--) {
     if (selected.includes(paginated[index].id)) {
@@ -431,6 +532,8 @@ export default function SendingPage() {
     };
   }, [statsCustomRange.endDate, statsCustomRange.startDate, statsRange]);
 
+  const selectedStatsWindow = statsRangeWindow;
+
   useEffect(() => {
     if (!drawerServer) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -446,7 +549,9 @@ export default function SendingPage() {
     const serverIds = selectedServers.map((server) => server.id);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRangeDailyDrafts({});
-    if (serverIds.length === 0 || statsRangeWindow.days.length === 0) {
+    setRangeStatusDrafts({});
+    setScheduleDailyDrafts({});
+    if (serverIds.length === 0 || selectedStatsWindow.days.length === 0) {
       setStatsLogs([]);
       return;
     }
@@ -458,8 +563,8 @@ export default function SendingPage() {
       sortBy: "date",
       sortOrder: "asc",
       serverIds: serverIds.join(","),
-      startDate: statsRangeWindow.startKey,
-      endDate: statsRangeWindow.endKey,
+      startDate: selectedStatsWindow.startKey,
+      endDate: selectedStatsWindow.endKey,
     });
 
     fetch(`/api/sending?${params.toString()}`)
@@ -483,7 +588,7 @@ export default function SendingPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedServers, statsRangeWindow.days.length, statsRangeWindow.endKey, statsRangeWindow.startKey]);
+  }, [selectedServers, selectedStatsWindow.days.length, selectedStatsWindow.endKey, selectedStatsWindow.startKey]);
 
   const totals = useMemo(() => {
     const actual = enriched.reduce((sum, server) => sum + Number(server.totalSends || 0), 0);
@@ -505,14 +610,21 @@ export default function SendingPage() {
 
   const weeklyStats = useMemo(() => {
     const serverIds = selectedServers.map((server) => server.id);
-    const rows = statsRangeWindow.days.map((day) => ({
+    const rows = selectedStatsWindow.days.map((day) => ({
       ...day,
       sent: 0,
       delivered: 0,
       bounces: 0,
       complaints: 0,
       unsubscribes: 0,
+      issues: 0,
+      ts04Issues: 0,
       valuesByServer: Object.fromEntries(serverIds.map((serverId) => [serverId, 0])) as Record<string, number>,
+      statusesByServer: Object.fromEntries(serverIds.map((serverId) => [serverId, ""])) as Record<string, string>,
+      statusValue: "",
+      statusLabel: "No status",
+      statusColor: statusDotColor(null),
+      hasMixedStatus: false,
     }));
     const byDate = new Map(rows.map((day) => [day.key, day]));
 
@@ -527,11 +639,36 @@ export default function SendingPage() {
       bucket.bounces += Number(log.bounces || 0);
       bucket.complaints += Number(log.complaints || 0);
       bucket.unsubscribes += Number(log.unsubscribes || 0);
+      const issues = collectScheduleIssues(log);
+      bucket.issues += issues.reduce((sum, issue) => sum + issue.count, 0);
+      bucket.ts04Issues += issues
+        .filter((issue) => issue.label === "TS004")
+        .reduce((sum, issue) => sum + issue.count, 0);
       bucket.valuesByServer[log.serverId] = (bucket.valuesByServer[log.serverId] || 0) + actualSends;
+      bucket.statusesByServer[log.serverId] = normalizeOperationalStatus(log.operationalStatus);
+    }
+
+    for (const row of rows) {
+      const statuses = serverIds.map((serverId) => row.statusesByServer[serverId] || "").filter(Boolean);
+      const uniqueStatuses = Array.from(new Set(statuses));
+      if (uniqueStatuses.length === 1 && statuses.length === serverIds.length) {
+        row.statusValue = uniqueStatuses[0];
+        row.statusLabel = getStatusConfig(uniqueStatuses[0]).label;
+        row.statusColor = statusDotColor(uniqueStatuses[0]);
+      } else if (uniqueStatuses.length > 1) {
+        row.statusValue = "";
+        row.statusLabel = "Mixed";
+        row.statusColor = "#7C3AED";
+        row.hasMixedStatus = true;
+      } else if (uniqueStatuses.length === 1) {
+        row.statusValue = uniqueStatuses[0];
+        row.statusLabel = `${getStatusConfig(uniqueStatuses[0]).label} (${statuses.length}/${serverIds.length})`;
+        row.statusColor = statusDotColor(uniqueStatuses[0]);
+      }
     }
 
     return rows;
-  }, [selectedServers, statsLogs, statsRangeWindow.days]);
+  }, [selectedServers, statsLogs, selectedStatsWindow.days]);
 
   const weeklyTotals = useMemo(() => {
     return weeklyStats.reduce(
@@ -552,9 +689,71 @@ export default function SendingPage() {
         date: day.dateLabel,
         sent: day.sent,
         delivered: day.delivered,
+        statusValue: day.statusValue,
+        statusLabel: day.statusLabel,
+        statusColor: day.statusColor,
+        hasMixedStatus: day.hasMixedStatus,
+        ts04Issues: day.ts04Issues,
       })),
     [weeklyStats]
   );
+
+  const monthlySchedule = useMemo(() => {
+    const dayIndexes = new Map(selectedStatsWindow.days.map((day, index) => [day.key, index]));
+    const rows = selectedServers.map((server) => ({
+      id: server.id,
+      name: server.name,
+      providerName: server.providerName,
+      status: server.status,
+      totalSent: 0,
+      totalIssues: 0,
+      cells: selectedStatsWindow.days.map((day) => ({
+        key: day.key,
+        sent: 0,
+        delivered: 0,
+        status: "",
+        note: "",
+        issues: [] as ScheduleIssue[],
+      })),
+    }));
+    const byServer = new Map(rows.map((row) => [row.id, row]));
+
+    for (const log of statsLogs) {
+      if (!log.serverId) continue;
+      const row = byServer.get(log.serverId);
+      if (!row) continue;
+      const index = dayIndexes.get(dateKey(new Date(log.date)));
+      if (index == null) continue;
+
+      const cell = row.cells[index];
+      const sent = Number(log.actualSends || 0);
+      const status = (log.operationalStatus || "").toLowerCase();
+
+      cell.sent += sent;
+      cell.delivered += Number(log.successfulSends || 0);
+      cell.status = status || cell.status;
+      cell.note = log.deliveryNotes || cell.note;
+      const issues = collectScheduleIssues(log);
+      for (const issue of issues) {
+        const existing = cell.issues.find((entry) => entry.label === issue.label);
+        if (existing) existing.count += issue.count;
+        else cell.issues.push(issue);
+      }
+      row.totalSent += sent;
+    }
+
+    for (const row of rows) {
+      row.totalIssues = row.cells.reduce((sum, cell) => sum + cell.issues.reduce((issueSum, issue) => issueSum + issue.count, 0), 0);
+    }
+
+    const dailyTotals = selectedStatsWindow.days.map((day, index) => ({
+      ...day,
+      sent: rows.reduce((sum, row) => sum + row.cells[index].sent, 0),
+      issues: rows.reduce((sum, row) => sum + row.cells[index].issues.reduce((issueSum, issue) => issueSum + issue.count, 0), 0),
+    }));
+
+    return { rows, dailyTotals };
+  }, [selectedServers, selectedStatsWindow.days, statsLogs]);
 
   const currentMonthUserChart = useMemo(() => {
     const now = new Date();
@@ -678,18 +877,30 @@ export default function SendingPage() {
     }
   };
 
-  const saveRangeDayVolume = async (dayKey: string, value: string, currentLabel: string) => {
+  const saveRangeDayStats = async (
+    dayKey: string,
+    payload: { actualSends?: number; operationalStatus?: string },
+    currentLabel: string,
+    successMessage: string
+  ) => {
     const serverIds = selectedServers.map((server) => server.id);
-    const actualSends = Number(value);
     if (serverIds.length === 0) {
       toast.error("Select at least one server first");
       return;
     }
-    if (!Number.isFinite(actualSends) || actualSends < 0) {
+    if (payload.actualSends != null && (!Number.isFinite(payload.actualSends) || payload.actualSends < 0)) {
       toast.error("Daily volume must be a positive number");
       return;
     }
-    if (serverIds.length > 1 && !window.confirm(`Set ${formatNumber(actualSends)} sent on ${currentLabel} for each of the ${serverIds.length} selected servers? Existing records for that day will be overwritten.`)) return;
+    if (payload.actualSends == null && !payload.operationalStatus) {
+      toast.error("Choose a status or enter a daily volume first");
+      return;
+    }
+
+    const confirmParts = [];
+    if (payload.actualSends != null) confirmParts.push(`${formatNumber(payload.actualSends)} sent`);
+    if (payload.operationalStatus) confirmParts.push(`status ${getStatusConfig(payload.operationalStatus).label}`);
+    if (serverIds.length > 1 && !window.confirm(`Set ${confirmParts.join(" and ")} on ${currentLabel} for each of the ${serverIds.length} selected servers? Existing records for that day will be updated.`)) return;
 
     setSavingWeeklyStats((state) => ({ ...state, [`range:${dayKey}`]: true }));
     try {
@@ -699,38 +910,156 @@ export default function SendingPage() {
         body: JSON.stringify({
           serverIds,
           date: dayKey,
-          actualSends,
+          ...payload,
         }),
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok && res.status !== 207) throw new Error(result.error || "Failed to save daily statistics");
       const failures = Number(result.failed || 0);
-      toast.success(`Daily statistics saved for ${result.updated || 0} server${result.updated === 1 ? "" : "s"}`, {
+      toast.success(`${successMessage} for ${result.updated || 0} server${result.updated === 1 ? "" : "s"}`, {
         description: failures ? `${failures} records could not be saved. Check selected servers have IPs.` : result.removedDuplicates ? `${result.removedDuplicates} duplicate record${result.removedDuplicates === 1 ? "" : "s"} collapsed.` : undefined,
       });
-      setRangeDailyDrafts((state) => {
-        const next = { ...state };
-        delete next[dayKey];
-        return next;
-      });
-      fetchData();
-      const params = new URLSearchParams({
-        pageSize: "5000",
-        sortBy: "date",
-        sortOrder: "asc",
-        serverIds: serverIds.join(","),
-        startDate: statsRangeWindow.startKey,
-        endDate: statsRangeWindow.endKey,
-      });
-      const refreshed = await fetch(`/api/sending?${params.toString()}`);
-      if (refreshed.ok) {
-        const json = await refreshed.json();
-        setStatsLogs(json.data ?? []);
+      if (payload.actualSends != null) {
+        setRangeDailyDrafts((state) => {
+          const next = { ...state };
+          delete next[dayKey];
+          return next;
+        });
       }
+      if (payload.operationalStatus) {
+        setRangeStatusDrafts((state) => {
+          const next = { ...state };
+          delete next[dayKey];
+          return next;
+        });
+      }
+      await fetchData();
+      await refreshSelectedStatsLogs(serverIds);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save daily statistics");
     } finally {
       setSavingWeeklyStats((state) => ({ ...state, [`range:${dayKey}`]: false }));
+    }
+  };
+
+  const saveRangeDayVolume = async (dayKey: string, value: string, currentLabel: string) => {
+    await saveRangeDayStats(dayKey, { actualSends: Number(value) }, currentLabel, "Daily volume saved");
+  };
+
+  const saveRangeDayStatus = async (dayKey: string, value: string, currentLabel: string) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      toast.error("Choose a status first");
+      return;
+    }
+    await saveRangeDayStats(dayKey, { operationalStatus: normalized }, currentLabel, "Daily status saved");
+  };
+
+  const refreshSelectedStatsLogs = async (serverIds: string[]) => {
+    const params = new URLSearchParams({
+      pageSize: "5000",
+      sortBy: "date",
+      sortOrder: "asc",
+      serverIds: serverIds.join(","),
+      startDate: selectedStatsWindow.startKey,
+      endDate: selectedStatsWindow.endKey,
+    });
+    const refreshed = await fetch(`/api/sending?${params.toString()}`);
+    if (refreshed.ok) {
+      const json = await refreshed.json();
+      setStatsLogs(json.data ?? []);
+    }
+  };
+
+  const applyScheduleCellPayload = (
+    serverId: string,
+    dayKey: string,
+    payload: { actualSends?: number; operationalStatus?: string; deliveryNotes?: string }
+  ) => {
+    const server = selectedServers.find((item) => item.id === serverId);
+    setStatsLogs((current) => {
+      const targetIndex = current.findIndex((log) => log.serverId === serverId && dateKey(new Date(log.date)) === dayKey);
+      if (targetIndex >= 0) {
+        return current.map((log, index) => {
+          if (index !== targetIndex) return log;
+          const actualSends = payload.actualSends ?? Number(log.actualSends || 0);
+          const bounces = Number(log.bounces || 0);
+          return {
+            ...log,
+            actualSends,
+            successfulSends: Math.max(0, actualSends - bounces),
+            operationalStatus: payload.operationalStatus ?? log.operationalStatus,
+            deliveryNotes: payload.deliveryNotes ?? log.deliveryNotes,
+            date: `${dayKey}T12:00:00.000Z`,
+          };
+        });
+      }
+
+      return [
+        ...current,
+        {
+          id: `local-${serverId}-${dayKey}`,
+          date: `${dayKey}T12:00:00.000Z`,
+          mailerId: null,
+          mailerName: null,
+          serverId,
+          serverName: server?.name ?? null,
+          providerName: server?.providerName ?? null,
+          actualSends: payload.actualSends ?? 0,
+          successfulSends: payload.actualSends ?? 0,
+          bounces: 0,
+          complaints: 0,
+          unsubscribes: 0,
+          operationalStatus: payload.operationalStatus ?? "normal",
+          deliveryNotes: payload.deliveryNotes ?? null,
+        },
+      ];
+    });
+  };
+
+  const saveScheduleCell = async (
+    serverId: string,
+    dayKey: string,
+    payload: { actualSends?: number; operationalStatus?: string; deliveryNotes?: string },
+    options?: { clearVolume?: boolean }
+  ) => {
+    if (payload.actualSends != null && (!Number.isFinite(payload.actualSends) || payload.actualSends < 0)) {
+      toast.error("Daily volume must be a positive number");
+      return;
+    }
+    if (payload.actualSends == null && !payload.operationalStatus && !payload.deliveryNotes?.trim()) {
+      toast.error("Enter a value first");
+      return;
+    }
+
+    const savingKey = `schedule:${serverId}:${dayKey}`;
+    setSavingWeeklyStats((state) => ({ ...state, [savingKey]: true }));
+
+    try {
+      const res = await fetch("/api/sending/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverId,
+          date: dayKey,
+          ...payload,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) throw new Error(result.error || "Failed to save schedule cell");
+      applyScheduleCellPayload(serverId, dayKey, payload);
+      toast.success("Schedule updated");
+      if (options?.clearVolume) {
+        setScheduleDailyDrafts((state) => {
+          const next = { ...state };
+          delete next[`${serverId}:${dayKey}`];
+          return next;
+        });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save schedule cell");
+    } finally {
+      setSavingWeeklyStats((state) => ({ ...state, [savingKey]: false }));
     }
   };
 
@@ -915,6 +1244,14 @@ export default function SendingPage() {
                 {paginated.length > 0 && paginated.every((server) => selected.includes(server.id)) ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}
                 {selected.length} selected
               </button>
+              {selected.length > 0 && !allFilteredServersSelected && filtered.length > selected.length && (
+                <button
+                  onClick={() => setSelected(filtered.map((server) => server.id))}
+                  className="h-[30px] rounded-[7px] border border-[#C7D2FE] bg-[#EEF2FF] px-3 text-[12px] font-semibold text-[#4F46E5]"
+                >
+                  Select all {filtered.length} filtered
+                </button>
+              )}
               <select disabled={selected.length === 0} onChange={(e) => { if (e.target.value === "paused") updateStatus(selected, "paused"); if (e.target.value === "active") updateStatus(selected, "active"); e.currentTarget.value = ""; }} className="h-[30px] rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[12px] font-medium text-[#374151] disabled:opacity-50">
                 <option value="">Bulk Actions</option>
                 <option value="active">Mark active</option>
@@ -1015,7 +1352,9 @@ export default function SendingPage() {
                     <div>
                       <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
                       <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                        {selectedServers.length === 1 ? selectedServers[0].name : `${selectedServers.length} selected servers`}
+                        {selectedServers.length === 1
+                          ? `${selectedServers[0].name} · ${selectedStatsWindow.label}`
+                          : `${selectedServers.length} selected servers · ${selectedStatsWindow.label}`}
                       </p>
                     </div>
                     <select value={statsRange} onChange={(event) => setStatsRange(event.target.value as StatsRangeKey)} className="h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]">
@@ -1041,27 +1380,59 @@ export default function SendingPage() {
                       const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
                       const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
                       const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
+                      const statusValues = selectedServers.map((server) => day.statusesByServer[server.id] ?? "");
+                      const allSameStatus = statusValues.length > 0 && statusValues.every((value) => value === statusValues[0]);
+                      const baseStatus = allSameStatus ? statusValues[0] ?? "" : "";
+                      const draftStatus = rangeStatusDrafts[day.key] ?? baseStatus;
                       const changed = draftValue.trim() !== "" && (!allSame || draftValue !== baseValue);
+                      const statusChanged = draftStatus.trim() !== "" && (!allSameStatus || draftStatus !== baseStatus);
                       const savingKey = `range:${day.key}`;
                       return (
-                        <div key={day.key} className="grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border border-[#E5E7EB] p-2">
-                          <div>
-                            <p className="text-[12px] font-bold text-[#111827]">{day.label}</p>
-                            <p className="text-[10px] text-[#6B7280]">{day.dateLabel}</p>
+                        <div key={day.key} className="rounded-[8px] border border-[#E5E7EB] p-2">
+                          <div className="grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2">
+                            <div>
+                              <p className="text-[12px] font-bold text-[#111827]">{day.label}</p>
+                              <p className="text-[10px] text-[#6B7280]">{day.dateLabel}</p>
+                            </div>
+                            <input
+                              value={draftValue}
+                              placeholder={allSame ? "0" : "Mixed"}
+                              onChange={(event) => setRangeDailyDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                              className="h-[30px] min-w-0 rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]"
+                            />
+                            <button
+                              onClick={() => saveRangeDayVolume(day.key, draftValue, day.dateLabel)}
+                              disabled={!changed || savingWeeklyStats[savingKey]}
+                              className="h-[30px] rounded-[6px] bg-[#4F46E5] px-2 text-[11px] font-semibold text-white disabled:opacity-40"
+                            >
+                              {savingWeeklyStats[savingKey] ? "..." : "Save"}
+                            </button>
                           </div>
-                          <input
-                            value={draftValue}
-                            placeholder={allSame ? "0" : "Mixed"}
-                            onChange={(event) => setRangeDailyDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
-                            className="h-[30px] min-w-0 rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827]"
-                          />
-                          <button
-                            onClick={() => saveRangeDayVolume(day.key, draftValue, day.dateLabel)}
-                            disabled={!changed || savingWeeklyStats[savingKey]}
-                            className="h-[30px] rounded-[6px] bg-[#4F46E5] px-2 text-[11px] font-semibold text-white disabled:opacity-40"
-                          >
-                            {savingWeeklyStats[savingKey] ? "..." : "Save"}
-                          </button>
+                          <div className="mt-2 flex items-center gap-2">
+                            <select
+                              value={draftStatus}
+                              onChange={(event) => setRangeStatusDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                              disabled={savingWeeklyStats[savingKey]}
+                              className="h-[30px] min-w-0 flex-1 rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#111827] disabled:opacity-60"
+                            >
+                              <option value="">{allSameStatus ? "Set status" : "Mixed status"}</option>
+                              {DAILY_STATUS_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => saveRangeDayStatus(day.key, draftStatus, day.dateLabel)}
+                              disabled={!statusChanged || savingWeeklyStats[savingKey]}
+                              className="h-[30px] rounded-[6px] border border-[#C7D2FE] bg-[#EEF2FF] px-2 text-[11px] font-semibold text-[#4F46E5] disabled:opacity-40"
+                            >
+                              {savingWeeklyStats[savingKey] ? "..." : "Save status"}
+                            </button>
+                          </div>
+                          <div>
+                            <div className="mt-2">
+                              <StatusBadge value={day.statusValue || null} label={day.statusLabel} />
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
@@ -1165,19 +1536,21 @@ export default function SendingPage() {
                       </tr>
                       {server.id === selectedStatsAnchorId && selectedServers.length > 0 && (
                         <tr className="border-b border-[#DCE3F0] bg-[#F8FAFC]">
-                          <td colSpan={tableColumnCount} className="px-4 py-4">
-                            <div className="rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] px-4 py-3">
-                                <div>
+                          <td colSpan={tableColumnCount} className="sticky left-0 z-30 px-4 py-4">
+                            <div className="w-[calc(100vw-208px)] max-w-[calc(100vw-208px)] overflow-hidden rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                              <div className="flex flex-wrap items-center gap-3 border-b border-[#E5E7EB] px-4 py-3">
+                                <div className="order-2 min-w-[220px] flex-1">
                                   <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
                                   <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                                    {selectedServers.length === 1
-                                      ? `${statsRangeWindow.label} for ${selectedServers[0].name}`
-                                      : `${statsRangeWindow.label} across ${selectedServers.length} selected servers`}
+                                    {allFilteredServersSelected
+                                      ? `${selectedStatsWindow.label} schedule for all ${selectedServers.length} filtered servers`
+                                      : selectedServers.length === 1
+                                        ? `${selectedStatsWindow.label} for ${selectedServers[0].name}`
+                                        : `${selectedStatsWindow.label} across ${selectedServers.length} selected servers`}
                                   </p>
                                   <p className="mt-1 text-[11px] font-medium text-[#6B7280]">Daily edits are applied to the selected server{selectedServers.length === 1 ? "" : "s"} only.</p>
                                 </div>
-                                <div className="flex flex-wrap items-end gap-2">
+                                <div className="order-1 flex shrink-0 flex-wrap items-end gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-2">
                                   <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
                                     Range
                                     <select
@@ -1215,8 +1588,8 @@ export default function SendingPage() {
                                   )}
                                 </div>
                               </div>
-                              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
-                                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[12px] sm:grid-cols-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-2">
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[12px] sm:grid-cols-2">
                                   <div>
                                     <p className="font-semibold text-[#6B7280]">Volume</p>
                                     <p className="mt-0.5 text-[18px] font-bold text-[#111827]">{formatNumber(weeklyTotals.sent)}</p>
@@ -1225,112 +1598,362 @@ export default function SendingPage() {
                                     <p className="font-semibold text-[#6B7280]">Success</p>
                                     <p className="mt-0.5 text-[18px] font-bold text-[#15803D]">{pct(weeklyTotals.delivered, weeklyTotals.sent, 1)}%</p>
                                   </div>
-                                  <div>
-                                    <p className="font-semibold text-[#6B7280]">Bounces</p>
-                                    <p className="mt-0.5 text-[18px] font-bold text-[#EA580C]">{pct(weeklyTotals.bounces, weeklyTotals.sent, 2)}%</p>
-                                  </div>
-                                  <div>
-                                    <p className="font-semibold text-[#6B7280]">Complaints</p>
-                                    <p className="mt-0.5 text-[18px] font-bold text-[#DC2626]">{pct(weeklyTotals.complaints, weeklyTotals.sent, 2)}%</p>
-                                  </div>
                                 </div>
                                 {loadingStatsLogs && <span className="text-[12px] font-semibold text-[#4F46E5]">Loading statistics...</span>}
                               </div>
-                              <div className="grid grid-cols-1 gap-0 xl:grid-cols-[1fr_360px]">
-                                <div className="min-h-[190px] border-b border-[#E5E7EB] p-4 xl:border-b-0 xl:border-r">
-                                  <ResponsiveContainer width="100%" height={175}>
-                                    <AreaChart data={trend}>
-                                      <defs>
-                                        <linearGradient id="weeklySentFill" x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.16} />
-                                          <stop offset="100%" stopColor="#4F46E5" stopOpacity={0} />
-                                        </linearGradient>
-                                        <linearGradient id="weeklyDeliveredFill" x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor="#16A34A" stopOpacity={0.12} />
-                                          <stop offset="100%" stopColor="#16A34A" stopOpacity={0} />
-                                        </linearGradient>
-                                      </defs>
-                                      <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
-                                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                                      <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} width={45} />
-                                      <Tooltip contentStyle={{ fontSize: "12px", borderRadius: "8px", border: "1px solid #E5E7EB" }} />
-                                      <Area type="monotone" dataKey="sent" name="Volume" stroke="#4F46E5" strokeWidth={2} fill="url(#weeklySentFill)" dot={{ r: 3, fill: "#fff", stroke: "#4F46E5", strokeWidth: 2 }} />
-                                      <Area type="monotone" dataKey="delivered" name="Successful" stroke="#16A34A" strokeWidth={2} fill="url(#weeklyDeliveredFill)" dot={{ r: 3, fill: "#fff", stroke: "#16A34A", strokeWidth: 2 }} />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </div>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full min-w-[360px]">
-                                    <thead>
-                                      <tr className="border-b border-[#E5E7EB]">
-                                        {["Day", "Sent / server", "Total", "Rate", "Issues"].map((header) => (
-                                          <th key={header} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.03em] text-[#6B7280]">{header}</th>
-                                        ))}
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {weeklyStats.map((day) => {
-                                        const issueCount = day.bounces + day.complaints + day.unsubscribes;
-                                        const serverValues = selectedServers.map((server) => day.valuesByServer[server.id] ?? 0);
-                                        const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
-                                        const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
-                                        const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
-                                        const changed = draftValue.trim() !== "" && (!allSame || draftValue !== baseValue);
-                                        const savingKey = `range:${day.key}`;
+                              {allFilteredServersSelected ? (
+                                <div>
+                                  <div className="sticky left-0 z-50 flex w-[310px] max-w-full items-center gap-2 border-t border-r border-[#DCE3F0] bg-white px-3 py-1 shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">
+                                    <span className="text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B]">Fill</span>
+                                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#475569]">
+                                      {selectedScheduleCell ? "Selected cell" : "Click a cell"}
+                                    </span>
+                                    <input
+                                      type="color"
+                                      value={scheduleCellColors[selectedScheduleCell || ""] || "#4F46E5"}
+                                      onChange={(event) => {
+                                        if (!selectedScheduleCell) return;
+                                        setScheduleCellColors((current) => ({ ...current, [selectedScheduleCell]: event.target.value }));
+                                      }}
+                                      disabled={!selectedScheduleCell}
+                                      className="h-[28px] w-9 cursor-pointer rounded border border-[#CBD5E1] bg-white p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                                      aria-label="Selected cell color"
+                                    />
+                                    <span className="text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B]">Text</span>
+                                    <input
+                                      type="color"
+                                      value={scheduleCellFontColors[selectedScheduleCell || ""] || "#111827"}
+                                      onChange={(event) => {
+                                        if (!selectedScheduleCell) return;
+                                        setScheduleCellFontColors((current) => ({ ...current, [selectedScheduleCell]: event.target.value }));
+                                      }}
+                                      disabled={!selectedScheduleCell}
+                                      className="h-[28px] w-9 cursor-pointer rounded border border-[#CBD5E1] bg-white p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                                      aria-label="Selected cell font color"
+                                    />
+                                  </div>
+                                <div className="max-h-[72vh] w-full overflow-auto border-t border-[#DCE3F0]">
+                                  <div
+                                    className="min-w-max"
+                                    style={{ width: `${310 + selectedStatsWindow.days.length * 176}px` }}
+                                  >
+                                    <div
+                                      className="grid h-[42px] border-b border-[#DCE3F0]"
+                                      style={{ gridTemplateColumns: `220px 90px repeat(${selectedStatsWindow.days.length}, 176px)` }}
+                                    >
+                                      <div className="sticky left-0 top-0 z-50 border-r border-[#DCE3F0] bg-[#F8FAFC] px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-[#475569] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Server</div>
+                                      <div className="sticky left-[220px] top-0 z-50 bg-[#F8FAFC] px-2 py-1.5 text-right text-[12px] font-bold uppercase tracking-[0.03em] text-[#475569] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Month Total</div>
+                                      {selectedStatsWindow.days.map((day) => {
+                                        const isMonday = new Date(`${day.key}T12:00:00Z`).getDay() === 1;
                                         return (
-                                          <tr key={day.key} className="border-b border-[#F1F5F9] last:border-0">
-                                            <td className="px-3 py-2">
-                                              <p className="text-[12px] font-bold text-[#111827]">{day.label}</p>
-                                              <p className="text-[10px] text-[#6B7280]">{day.dateLabel}</p>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                              <div className="flex items-center gap-1">
+                                          <div
+                                            key={day.key}
+                                            className={`sticky top-0 z-30 border-r border-[#DCE3F0] bg-[#F8FAFC] px-2 py-1.5 text-center ${isMonday ? "border-l-2 border-l-[#94A3B8]" : ""}`}
+                                          >
+                                            <span className="block text-[12px] font-bold uppercase text-[#475569]">{day.label}</span>
+                                            <span className="block text-[11px] font-semibold text-[#94A3B8]">{day.dateLabel}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div
+                                      className="grid h-[34px] border-b border-[#DCE3F0]"
+                                      style={{ gridTemplateColumns: `220px 90px repeat(${selectedStatsWindow.days.length}, 176px)` }}
+                                    >
+                                      <div className="sticky left-0 top-[42px] z-50 border-r border-[#DCE3F0] bg-white px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Daily total</div>
+                                      <div className="sticky left-[220px] top-[42px] z-50 bg-white px-2 py-1.5 text-right text-[13px] font-bold text-[#111827] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">{formatNumber(weeklyTotals.sent)}</div>
+                                      {monthlySchedule.dailyTotals.map((day) => {
+                                        const isMonday = new Date(`${day.key}T12:00:00Z`).getDay() === 1;
+                                        return (
+                                          <div
+                                            key={day.key}
+                                            className={`border-r border-[#DCE3F0] bg-white px-1.5 py-1 ${isMonday ? "border-l-2 border-l-[#94A3B8]" : ""}`}
+                                          >
+                                            <div className={`px-1.5 py-0.5 text-center text-[12px] font-bold ${day.sent > 0 ? "bg-[#ECFDF5] text-[#15803D]" : "bg-[#F8FAFC] text-[#CBD5E1]"}`}>
+                                              {day.sent > 0 ? formatNumber(day.sent) : "-"}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    {monthlySchedule.rows.map((row) => (
+                                      <div
+                                        key={row.id}
+                                        className="grid h-[40px] border-b border-[#E5E7EB]"
+                                        style={{ gridTemplateColumns: `220px 90px repeat(${selectedStatsWindow.days.length}, 176px)` }}
+                                      >
+                                        <button onClick={() => setDrawerServerId(row.id)} className="sticky left-0 z-40 border-r border-[#E5E7EB] bg-white px-3 py-1 text-left shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)] hover:bg-[#F8FAFC]">
+                                          <span className="block truncate text-[13px] font-bold text-[#2563EB]">{row.name}</span>
+                                          <span className="block truncate text-[11px] font-medium text-[#64748B]">{row.providerName ?? "Unknown provider"} · {row.status}</span>
+                                        </button>
+                                        <div className="sticky left-[220px] z-40 bg-white px-2 py-1 text-right shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">
+                                          <span className="block text-[13px] font-bold text-[#111827]">{formatNumber(row.totalSent)}</span>
+                                        </div>
+                                        {row.cells.map((cell) => {
+                                          const isMonday = new Date(`${cell.key}T12:00:00Z`).getDay() === 1;
+                                          const draftKey = `${row.id}:${cell.key}`;
+                                          const savingKey = `schedule:${row.id}:${cell.key}`;
+                                          const baseCellValue = cell.sent > 0 ? String(cell.sent) : cell.note || "";
+                                          const sentDraft = scheduleDailyDrafts[draftKey] ?? baseCellValue;
+                                          const cellColor = scheduleCellColors[draftKey];
+                                          const fontColor = scheduleCellFontColors[draftKey] || "#111827";
+                                          const sentChanged = sentDraft !== baseCellValue;
+                                          const selectedCell = selectedScheduleCell === draftKey;
+                                          const saveDraft = () =>
+                                            saveScheduleCell(
+                                              row.id,
+                                              cell.key,
+                                              /^\d+$/.test(sentDraft.trim())
+                                                ? { actualSends: Number(sentDraft.trim()) }
+                                                : { deliveryNotes: sentDraft.trim() || undefined },
+                                              { clearVolume: true }
+                                            );
+                                          return (
+                                            <div
+                                              key={cell.key}
+                                              onClick={() => setSelectedScheduleCell(draftKey)}
+                                              className={`border-r border-[#E5E7EB] p-0.5 ${isMonday ? "border-l-2 border-l-[#94A3B8]" : ""} ${selectedCell ? "ring-2 ring-inset ring-[#4F46E5]" : ""}`}
+                                              style={{ backgroundColor: cellColor ? hexToRgba(cellColor, 0.18) : undefined }}
+                                            >
+                                              <div className="h-full space-y-1 overflow-hidden">
                                                 <input
-                                                  value={draftValue}
-                                                  placeholder={allSame ? "0" : "Mixed"}
-                                                  onChange={(event) => setRangeDailyDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                                                  value={sentDraft}
+                                                  placeholder="Type anything"
+                                                  onFocus={() => setSelectedScheduleCell(draftKey)}
+                                                  onChange={(event) => setScheduleDailyDrafts((current) => ({ ...current, [draftKey]: event.target.value }))}
                                                   onKeyDown={(event) => {
-                                                    if (event.key === "Enter" && changed) saveRangeDayVolume(day.key, draftValue, day.dateLabel);
-                                                    if (event.key === "Escape") {
-                                                      setRangeDailyDrafts((state) => {
-                                                        const next = { ...state };
-                                                        delete next[day.key];
-                                                        return next;
-                                                      });
-                                                      event.currentTarget.blur();
+                                                    if (event.key === "Enter" && sentChanged) {
+                                                      event.preventDefault();
+                                                      saveDraft();
                                                     }
                                                   }}
                                                   disabled={savingWeeklyStats[savingKey]}
-                                                  className="h-[28px] w-[82px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
+                                                  className="h-[22px] w-full rounded-none border-0 px-1.5 text-center text-[12px] font-semibold text-[#111827] outline-none focus:ring-1 focus:ring-[#4F46E5] disabled:opacity-60"
+                                                  style={{
+                                                    backgroundColor: cellColor ? hexToRgba(cellColor, 0.92) : "transparent",
+                                                    color: fontColor,
+                                                  }}
                                                 />
-                                                {changed && (
+                                                {sentChanged && (
                                                   <button
-                                                    onMouseDown={(event) => event.preventDefault()}
-                                                    onClick={() => saveRangeDayVolume(day.key, draftValue, day.dateLabel)}
+                                                    onClick={saveDraft}
                                                     disabled={savingWeeklyStats[savingKey]}
-                                                    className="rounded-[6px] bg-[#4F46E5] px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-60"
+                                                    className="h-[16px] w-full rounded-none bg-[#4F46E5] px-2 text-[11px] font-semibold text-white disabled:opacity-60"
                                                   >
-                                                    {savingWeeklyStats[savingKey] ? "..." : "Save"}
+                                                    {savingWeeklyStats[savingKey] ? "Saving..." : "Save"}
                                                   </button>
                                                 )}
                                               </div>
-                                            </td>
-                                            <td className="px-3 py-2 text-[12px] font-semibold text-[#111827]">
-                                              {formatNumber(day.sent)}
-                                            </td>
-                                            <td className="px-3 py-2 text-[12px] font-semibold text-[#15803D]">{pct(day.delivered, day.sent, 1)}%</td>
-                                            <td className="px-3 py-2">
-                                              <span className={`rounded-[5px] px-2 py-0.5 text-[11px] font-semibold ${issueCount > 0 ? "bg-[#FFF7ED] text-[#EA580C]" : "bg-[#ECFDF5] text-[#15803D]"}`}>
-                                                {issueCount}
-                                              </span>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 gap-0 xl:grid-cols-[1fr_360px]">
+                                  <div className="min-h-[190px] border-b border-[#E5E7EB] p-4 xl:border-b-0 xl:border-r">
+                                    <ResponsiveContainer width="100%" height={175}>
+                                      <AreaChart data={trend}>
+                                        <defs>
+                                          <linearGradient id="weeklySentFill" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.16} />
+                                            <stop offset="100%" stopColor="#4F46E5" stopOpacity={0} />
+                                          </linearGradient>
+                                          <linearGradient id="weeklyDeliveredFill" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="#16A34A" stopOpacity={0.12} />
+                                            <stop offset="100%" stopColor="#16A34A" stopOpacity={0} />
+                                          </linearGradient>
+                                        </defs>
+                                        <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} width={45} />
+                                        <Tooltip
+                                          content={({ active, payload, label }) => {
+                                            if (!active || !payload?.length) return null;
+                                            const point = payload[0]?.payload as { sent: number; delivered: number; statusLabel?: string; statusValue?: string };
+                                            return (
+                                              <div className="rounded-[8px] border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
+                                                <p className="font-semibold text-[#111827]">{label}</p>
+                                                <p className="mt-1 text-[#4F46E5]">Volume: <span className="font-semibold">{formatNumber(point.sent || 0)}</span></p>
+                                                <p className="text-[#15803D]">Successful: <span className="font-semibold">{formatNumber(point.delivered || 0)}</span></p>
+                                                <div className="mt-2">
+                                                  <StatusBadge value={point.statusValue || null} label={point.statusLabel || "No status"} />
+                                                </div>
+                                              </div>
+                                            );
+                                          }}
+                                        />
+                                        <Area
+                                          type="monotone"
+                                          dataKey="sent"
+                                          name="Volume"
+                                          stroke="#4F46E5"
+                                          strokeWidth={2}
+                                          fill="url(#weeklySentFill)"
+                                          dot={({ cx, cy, payload }) => (
+                                            <circle
+                                              cx={cx}
+                                              cy={cy}
+                                              r={4}
+                                              fill={payload?.statusColor || "#4F46E5"}
+                                              stroke="#fff"
+                                              strokeWidth={2}
+                                            />
+                                          )}
+                                          activeDot={({ cx, cy, payload }) => (
+                                            <circle
+                                              cx={cx}
+                                              cy={cy}
+                                              r={5}
+                                              fill={payload?.statusColor || "#4F46E5"}
+                                              stroke="#111827"
+                                              strokeWidth={1.5}
+                                            />
+                                          )}
+                                        />
+                                        {trend
+                                          .filter((point) => point.ts04Issues > 0)
+                                          .map((point) => (
+                                            <ReferenceDot
+                                              key={`ts04-${point.date}`}
+                                              x={point.date}
+                                              y={point.sent}
+                                              r={6}
+                                              fill="#F97316"
+                                              stroke="#fff"
+                                              strokeWidth={2}
+                                              ifOverflow="extendDomain"
+                                              label={{
+                                                value: `TSS04 (${formatNumber(point.ts04Issues)})`,
+                                                position: "top",
+                                                fill: "#C2410C",
+                                                fontSize: 10,
+                                                fontWeight: 700,
+                                              }}
+                                            />
+                                          ))}
+                                        <Area type="monotone" dataKey="delivered" name="Successful" stroke="#16A34A" strokeWidth={2} fill="url(#weeklyDeliveredFill)" dot={{ r: 3, fill: "#fff", stroke: "#16A34A", strokeWidth: 2 }} />
+                                      </AreaChart>
+                                    </ResponsiveContainer>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {weeklyStats.map((day) => (
+                                        <div key={day.key} className="rounded-[7px] border border-[#E5E7EB] bg-white px-2 py-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <span
+                                              className="inline-block h-2.5 w-2.5 rounded-full"
+                                              style={{ backgroundColor: day.statusColor }}
+                                            />
+                                            <p className="text-[10px] font-semibold text-[#64748B]">{day.label}</p>
+                                          </div>
+                                          <div className="mt-1">
+                                            <StatusBadge value={day.statusValue || null} label={day.statusLabel} className="px-1.5 py-0 text-[10px]" />
+                                          </div>
+                                          {day.ts04Issues > 0 && (
+                                            <p className="mt-1 text-[10px] font-semibold text-[#C2410C]">TSS04 ({formatNumber(day.ts04Issues)})</p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full min-w-[360px]">
+                                      <thead>
+                                        <tr className="border-b border-[#E5E7EB]">
+                                          {["Day", "Sent / server", "Status"].map((header) => (
+                                            <th key={header} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.03em] text-[#6B7280]">{header}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {weeklyStats.map((day) => {
+                                          const serverValues = selectedServers.map((server) => day.valuesByServer[server.id] ?? 0);
+                                          const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
+                                          const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
+                                          const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
+                                          const statusValues = selectedServers.map((server) => day.statusesByServer[server.id] ?? "");
+                                          const allSameStatus = statusValues.length > 0 && statusValues.every((value) => value === statusValues[0]);
+                                          const baseStatus = allSameStatus ? statusValues[0] ?? "" : "";
+                                          const draftStatus = rangeStatusDrafts[day.key] ?? baseStatus;
+                                          const changed = draftValue.trim() !== "" && (!allSame || draftValue !== baseValue);
+                                          const statusChanged = draftStatus.trim() !== "" && (!allSameStatus || draftStatus !== baseStatus);
+                                          const savingKey = `range:${day.key}`;
+                                          return (
+                                            <tr key={day.key} className="border-b border-[#F1F5F9] last:border-0">
+                                              <td className="px-3 py-2">
+                                                <p className="text-[12px] font-bold text-[#111827]">{day.label}</p>
+                                                <p className="text-[10px] text-[#6B7280]">{day.dateLabel}</p>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <div className="flex items-center gap-1">
+                                                  <input
+                                                    value={draftValue}
+                                                    placeholder={allSame ? "0" : "Mixed"}
+                                                    onChange={(event) => setRangeDailyDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                                                    onKeyDown={(event) => {
+                                                      if (event.key === "Enter" && changed) saveRangeDayVolume(day.key, draftValue, day.dateLabel);
+                                                      if (event.key === "Escape") {
+                                                        setRangeDailyDrafts((state) => {
+                                                          const next = { ...state };
+                                                          delete next[day.key];
+                                                          return next;
+                                                        });
+                                                        event.currentTarget.blur();
+                                                      }
+                                                    }}
+                                                    disabled={savingWeeklyStats[savingKey]}
+                                                    className="h-[28px] w-[82px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
+                                                  />
+                                                  {changed && (
+                                                    <button
+                                                      onMouseDown={(event) => event.preventDefault()}
+                                                      onClick={() => saveRangeDayVolume(day.key, draftValue, day.dateLabel)}
+                                                      disabled={savingWeeklyStats[savingKey]}
+                                                      className="rounded-[6px] bg-[#4F46E5] px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-60"
+                                                    >
+                                                      {savingWeeklyStats[savingKey] ? "..." : "Save"}
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <div className="space-y-1">
+                                                  <select
+                                                    value={draftStatus}
+                                                    onChange={(event) => setRangeStatusDrafts((state) => ({ ...state, [day.key]: event.target.value }))}
+                                                    disabled={savingWeeklyStats[savingKey]}
+                                                    className="h-[28px] w-[120px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-medium text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
+                                                  >
+                                                    <option value="">{allSameStatus ? "Set status" : "Mixed status"}</option>
+                                                    {DAILY_STATUS_OPTIONS.map((option) => (
+                                                      <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                  </select>
+                                                  <div className="flex items-center gap-2">
+                                                    <StatusBadge value={day.statusValue || null} label={day.statusLabel} className="px-1.5 py-0 text-[10px]" />
+                                                    {statusChanged && (
+                                                      <button
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() => saveRangeDayStatus(day.key, draftStatus, day.dateLabel)}
+                                                        disabled={savingWeeklyStats[savingKey]}
+                                                        className="rounded-[6px] border border-[#C7D2FE] bg-[#EEF2FF] px-2 py-1 text-[10px] font-semibold text-[#4F46E5] disabled:opacity-60"
+                                                      >
+                                                        {savingWeeklyStats[savingKey] ? "..." : "Save"}
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -16,6 +16,8 @@ const variantClasses: Record<StatusVariant, string> = {
 };
 
 export const STATUS_CONFIG: Record<string, { variant: StatusVariant; label: string }> = {
+  normal: { variant: "muted", label: "Normal" },
+  watch: { variant: "warning", label: "Watch" },
   not_contacted: { variant: "muted", label: "Not Contacted" },
   ready_to_contact: { variant: "info", label: "Ready to Contact" },
   contacted: { variant: "default", label: "Contacted" },
@@ -46,12 +48,15 @@ export const STATUS_CONFIG: Record<string, { variant: StatusVariant; label: stri
   cancelled: { variant: "danger", label: "Cancelled" },
   expired: { variant: "danger", label: "Expired" },
   retired: { variant: "muted", label: "Retired" },
+  archived: { variant: "muted", label: "Archived" },
   unused: { variant: "muted", label: "Unused" },
   public: { variant: "info", label: "Public" },
   down: { variant: "danger", label: "Down" },
   port_closed: { variant: "danger", label: "Port Closed" },
   ts04_error: { variant: "danger", label: "TSS04" },
+  tss04_error: { variant: "danger", label: "TSS04" },
   tss05_error: { variant: "danger", label: "TSS05" },
+  tss07_error: { variant: "danger", label: "TSS07" },
   tss09_error: { variant: "danger", label: "TSS09" },
   bounce: { variant: "danger", label: "Bounce" },
   complaint: { variant: "danger", label: "Complaint" },

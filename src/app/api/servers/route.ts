@@ -240,6 +240,7 @@ export async function GET(request: Request) {
     );
   }
   if (status) conditions.push(eq(servers.status, status as typeof servers.$inferSelect.status));
+  if (!admin) conditions.push(sql`${servers.status} <> 'archived'`);
   if (providerId) conditions.push(eq(servers.providerId, providerId));
   if (scopedUserId) {
     conditions.push(sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${servers.id} and ${serverUsers.userId} = ${scopedUserId})`);

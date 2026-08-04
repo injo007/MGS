@@ -53,6 +53,7 @@ export const serverStatusEnum = pgEnum("server_status", [
   "tss09_error",
   "bounce",
   "complaint",
+  "archived",
 ]);
 
 export const ipStatusEnum = pgEnum("ip_status", [
@@ -109,9 +110,20 @@ export const responseTypeEnum = pgEnum("response_type", [
 
 export const sendingStatusEnum = pgEnum("sending_status", [
   "normal",
+  "active",
   "watch",
   "paused",
   "stopped",
+  "suspended",
+  "down",
+  "port_closed",
+  "ts04_error",
+  "tss04_error",
+  "tss05_error",
+  "tss07_error",
+  "tss09_error",
+  "bounce",
+  "complaint",
 ]);
 
 export const taskPriorityEnum = pgEnum("task_priority", [

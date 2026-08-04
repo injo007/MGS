@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { serverUsers } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { servers, serverUsers } from "@/db/schema";
+import { and, eq, ne } from "drizzle-orm";
 
 export type SessionLike = {
   user?: {
@@ -30,7 +30,8 @@ export async function canAccessServer(session: SessionLike, serverId: string) {
   const [assignment] = await db
     .select({ id: serverUsers.id })
     .from(serverUsers)
-    .where(and(eq(serverUsers.serverId, serverId), eq(serverUsers.userId, userId)))
+    .innerJoin(servers, eq(servers.id, serverUsers.serverId))
+    .where(and(eq(serverUsers.serverId, serverId), eq(serverUsers.userId, userId), ne(servers.status, "archived")))
     .limit(1);
 
   return Boolean(assignment);
