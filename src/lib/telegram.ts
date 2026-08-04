@@ -119,7 +119,7 @@ export async function sendTelegramAlert(text: string, options?: { parseMode?: "M
 }
 
 export async function sendAuditTelegramAlert(input: {
-  action: "login" | "create" | "delete";
+  action: "login" | "create" | "delete" | "archive";
   entityType: "user" | "provider" | "server" | "ip_address";
   actorName?: string | null;
   actorEmail?: string | null;
@@ -131,6 +131,7 @@ export async function sendAuditTelegramAlert(input: {
       login: "User Login",
       create: "Created",
       delete: "Deleted",
+      archive: "Archived",
     };
     const entityLabels = {
       user: "User",
@@ -138,7 +139,13 @@ export async function sendAuditTelegramAlert(input: {
       server: "Server",
       ip_address: "IP Address",
     };
-    const prefix = input.action === "delete" ? "[Deleted]" : input.action === "login" ? "[User Login]" : "[Created]";
+    const prefix = input.action === "delete"
+      ? "[Deleted]"
+      : input.action === "archive"
+        ? "[Archived]"
+        : input.action === "login"
+          ? "[User Login]"
+          : "[Created]";
     const lines = [
       `${prefix} ${actionLabels[input.action]}`,
       `Type: ${entityLabels[input.entityType]}`,

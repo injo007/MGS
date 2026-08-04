@@ -29,6 +29,18 @@ import { forbidden, isAdmin } from "@/lib/access-control";
 
 const BACKUP_VERSION = 1;
 
+type BackupTableConfig = {
+  key: string;
+  table: any;
+  primaryKey: any;
+  primaryKeyField: string;
+  foreignKeys?: Record<string, string>;
+  matchers?: readonly {
+    fields: readonly string[];
+    columns: readonly any[];
+  }[];
+};
+
 const TABLES = [
   {
     key: "roles",
@@ -173,10 +185,10 @@ const TABLES = [
     primaryKeyField: "id",
     foreignKeys: { userId: "users" },
   },
-] as const;
+] as const satisfies readonly BackupTableConfig[];
 
 type TableKey = (typeof TABLES)[number]["key"];
-type TableConfig = (typeof TABLES)[number];
+type TableConfig = BackupTableConfig & { key: TableKey };
 
 const DATE_KEYS = new Set([
   "emailVerified",
