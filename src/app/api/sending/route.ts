@@ -67,6 +67,8 @@ export async function GET(request: Request) {
         unsubscribes: sendingLogs.unsubscribes,
         deliveryNotes: sendingLogs.deliveryNotes,
         operationalStatus: sendingLogs.operationalStatus,
+        cellColor: sendingLogs.cellColor,
+        cellFontColor: sendingLogs.cellFontColor,
         createdAt: sendingLogs.createdAt,
         updatedAt: sendingLogs.updatedAt,
         providerName: providers.name,

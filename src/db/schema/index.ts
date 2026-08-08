@@ -575,6 +575,8 @@ export const sendingLogs = pgTable(
     unsubscribes: integer("unsubscribes").default(0),
     deliveryNotes: text("delivery_notes"),
     operationalStatus: sendingStatusEnum("operational_status").default("normal"),
+    cellColor: text("cell_color"),
+    cellFontColor: text("cell_font_color"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

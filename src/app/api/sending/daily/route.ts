@@ -66,6 +66,8 @@ async function upsertDailyLog({
   actualSends,
   operationalStatus,
   deliveryNotes,
+  cellColor,
+  cellFontColor,
   sessionId,
 }: {
   serverId: string;
@@ -73,6 +75,8 @@ async function upsertDailyLog({
   actualSends?: number;
   operationalStatus?: SendingStatus;
   deliveryNotes?: string;
+  cellColor?: string;
+  cellFontColor?: string;
   sessionId: string;
 }) {
   const [server] = await db
@@ -131,7 +135,9 @@ async function upsertDailyLog({
     complaints: Number(primary?.complaints || 0),
     unsubscribes: Number(primary?.unsubscribes || 0),
     operationalStatus: operationalStatus || primary?.operationalStatus || "normal",
-    deliveryNotes: deliveryNotes?.trim() || primary?.deliveryNotes || "Updated from Server Statistics Center",
+    deliveryNotes: deliveryNotes?.trim() || primary?.deliveryNotes || (cellColor || cellFontColor ? null : "Updated from Server Statistics Center"),
+    cellColor: cellColor || primary?.cellColor || null,
+    cellFontColor: cellFontColor || primary?.cellFontColor || null,
     updatedAt: new Date(),
   };
 
@@ -176,6 +182,12 @@ export async function POST(request: Request) {
   const actualSends = body.actualSends == null || body.actualSends === "" ? undefined : Number(body.actualSends);
   const operationalStatus = parseSendingStatus(body.operationalStatus);
   const deliveryNotes = typeof body.deliveryNotes === "string" ? body.deliveryNotes : undefined;
+  const cellColor = typeof body.cellColor === "string" && body.cellColor.trim() ? body.cellColor.trim() : undefined;
+  const cellFontColor = typeof body.cellFontColor === "string" && body.cellFontColor.trim() ? body.cellFontColor.trim() : undefined;
+
+  if ((cellColor && !/^#[0-9a-fA-F]{6}$/.test(cellColor)) || (cellFontColor && !/^#[0-9a-fA-F]{6}$/.test(cellFontColor))) {
+    return NextResponse.json({ error: "cellColor and cellFontColor must be hex colors like #4F46E5" }, { status: 400 });
+  }
   const days = body.startDate && body.endDate
     ? dateRange(String(body.startDate), String(body.endDate))
     : body.date
@@ -191,7 +203,7 @@ export async function POST(request: Request) {
   if (typeof body.operationalStatus === "string" && body.operationalStatus.trim() && !operationalStatus) {
     return NextResponse.json({ error: "Invalid operationalStatus value" }, { status: 400 });
   }
-  if (actualSends == null && !operationalStatus && !deliveryNotes?.trim()) {
+  if (actualSends == null && !operationalStatus && !deliveryNotes?.trim() && !cellColor && !cellFontColor) {
     return NextResponse.json({ error: "Provide at least one daily statistic to update" }, { status: 400 });
   }
 
@@ -210,6 +222,8 @@ export async function POST(request: Request) {
         actualSends,
         operationalStatus,
         deliveryNotes,
+        cellColor,
+        cellFontColor,
         sessionId: sessionUserId(session),
       }));
     }
@@ -225,6 +239,8 @@ export async function POST(request: Request) {
       actualSends,
       operationalStatus,
       deliveryNotes,
+      cellColor,
+      cellFontColor,
       results,
     },
   });

@@ -89,6 +89,8 @@ interface SendingItem {
   unsubscribes: number | null;
   operationalStatus: string | null;
   deliveryNotes: string | null;
+  cellColor?: string | null;
+  cellFontColor?: string | null;
 }
 
 type ScheduleIssueTone = "orange" | "red" | "violet" | "blue" | "slate";
@@ -484,6 +486,8 @@ export default function SendingPage() {
     });
   }, [activeTab, alertFilter, assignedFilter, enriched, providerFilter, regionFilter, search, statusFilter, warmupEnabled, warmupFilter]);
 
+  const scheduleServers = useMemo(() => (selectedServers.length > 0 ? selectedServers : filtered), [filtered, selectedServers]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
@@ -495,10 +499,13 @@ export default function SendingPage() {
   const allFilteredServersSelected = filtered.length > 0 && filtered.every((server) => selected.includes(server.id));
   let selectedStatsAnchorId: string | null = null;
   for (let index = paginated.length - 1; index >= 0; index--) {
-    if (selected.includes(paginated[index].id)) {
+    if (selectedServers.length > 0 && selected.includes(paginated[index].id)) {
       selectedStatsAnchorId = paginated[index].id;
       break;
     }
+  }
+  if (selectedStatsAnchorId === null && paginated.length > 0) {
+    selectedStatsAnchorId = paginated[paginated.length - 1].id;
   }
   const drawerServer = enriched.find((server) => server.id === drawerServerId) ?? null;
   const statsRangeWindow = useMemo(() => {
@@ -546,7 +553,7 @@ export default function SendingPage() {
   }, [autoThrottle, drawerServer]);
 
   useEffect(() => {
-    const serverIds = selectedServers.map((server) => server.id);
+    const serverIds = scheduleServers.map((server) => server.id);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRangeDailyDrafts({});
     setRangeStatusDrafts({});
@@ -588,7 +595,7 @@ export default function SendingPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedServers, selectedStatsWindow.days.length, selectedStatsWindow.endKey, selectedStatsWindow.startKey]);
+  }, [scheduleServers, selectedStatsWindow.days.length, selectedStatsWindow.endKey, selectedStatsWindow.startKey]);
 
   const totals = useMemo(() => {
     const actual = enriched.reduce((sum, server) => sum + Number(server.totalSends || 0), 0);
@@ -609,7 +616,7 @@ export default function SendingPage() {
   ];
 
   const weeklyStats = useMemo(() => {
-    const serverIds = selectedServers.map((server) => server.id);
+    const serverIds = scheduleServers.map((server) => server.id);
     const rows = selectedStatsWindow.days.map((day) => ({
       ...day,
       sent: 0,
@@ -668,7 +675,7 @@ export default function SendingPage() {
     }
 
     return rows;
-  }, [selectedServers, statsLogs, selectedStatsWindow.days]);
+  }, [scheduleServers, statsLogs, selectedStatsWindow.days]);
 
   const weeklyTotals = useMemo(() => {
     return weeklyStats.reduce(
@@ -700,7 +707,7 @@ export default function SendingPage() {
 
   const monthlySchedule = useMemo(() => {
     const dayIndexes = new Map(selectedStatsWindow.days.map((day, index) => [day.key, index]));
-    const rows = selectedServers.map((server) => ({
+    const rows = scheduleServers.map((server) => ({
       id: server.id,
       name: server.name,
       providerName: server.providerName,
@@ -753,7 +760,19 @@ export default function SendingPage() {
     }));
 
     return { rows, dailyTotals };
-  }, [selectedServers, selectedStatsWindow.days, statsLogs]);
+  }, [scheduleServers, selectedStatsWindow.days, statsLogs]);
+
+  const savedCellColors = useMemo(() => {
+    const background: Record<string, string> = {};
+    const font: Record<string, string> = {};
+    for (const log of statsLogs) {
+      if (!log.serverId) continue;
+      const key = `${log.serverId}:${dateKey(new Date(log.date))}`;
+      if (log.cellColor) background[key] = log.cellColor;
+      if (log.cellFontColor) font[key] = log.cellFontColor;
+    }
+    return { background, font };
+  }, [statsLogs]);
 
   const currentMonthUserChart = useMemo(() => {
     const now = new Date();
@@ -883,7 +902,7 @@ export default function SendingPage() {
     currentLabel: string,
     successMessage: string
   ) => {
-    const serverIds = selectedServers.map((server) => server.id);
+    const serverIds = scheduleServers.map((server) => server.id);
     if (serverIds.length === 0) {
       toast.error("Select at least one server first");
       return;
@@ -976,7 +995,7 @@ export default function SendingPage() {
     dayKey: string,
     payload: { actualSends?: number; operationalStatus?: string; deliveryNotes?: string }
   ) => {
-    const server = selectedServers.find((item) => item.id === serverId);
+    const server = scheduleServers.find((item) => item.id === serverId);
     setStatsLogs((current) => {
       const targetIndex = current.findIndex((log) => log.serverId === serverId && dateKey(new Date(log.date)) === dayKey);
       if (targetIndex >= 0) {
@@ -1058,6 +1077,33 @@ export default function SendingPage() {
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save schedule cell");
+    } finally {
+      setSavingWeeklyStats((state) => ({ ...state, [savingKey]: false }));
+    }
+  };
+
+  const saveScheduleCellColor = async (
+    serverId: string,
+    dayKey: string,
+    color: { cellColor?: string; cellFontColor?: string }
+  ) => {
+    const savingKey = `scheduleColor:${serverId}:${dayKey}`;
+    setSavingWeeklyStats((state) => ({ ...state, [savingKey]: true }));
+    try {
+      const res = await fetch("/api/sending/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverId,
+          date: dayKey,
+          ...color,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) throw new Error(result.error || "Failed to save schedule color");
+      setStatsLogs((current) => current.map((log) => (log.serverId === serverId && dateKey(new Date(log.date)) === dayKey ? { ...log, ...color } : log)));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save schedule color");
     } finally {
       setSavingWeeklyStats((state) => ({ ...state, [savingKey]: false }));
     }
@@ -1346,15 +1392,17 @@ export default function SendingPage() {
                 ))
               )}
 
-              {selectedServers.length > 0 && (
+              {scheduleServers.length > 0 && (
                 <div className="rounded-[10px] border border-[#DCE3F0] bg-white p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
                       <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                        {selectedServers.length === 1
-                          ? `${selectedServers[0].name} · ${selectedStatsWindow.label}`
-                          : `${selectedServers.length} selected servers · ${selectedStatsWindow.label}`}
+                        {scheduleServers.length === 1
+                          ? `${scheduleServers[0].name} · ${selectedStatsWindow.label}`
+                          : scheduleServers.length === filtered.length
+                            ? `${scheduleServers.length} servers · ${selectedStatsWindow.label}`
+                            : `${scheduleServers.length} selected servers · ${selectedStatsWindow.label}`}
                       </p>
                     </div>
                     <select value={statsRange} onChange={(event) => setStatsRange(event.target.value as StatsRangeKey)} className="h-[32px] rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827]">
@@ -1376,11 +1424,11 @@ export default function SendingPage() {
                   </div>
                   <div className="mt-4 space-y-2">
                     {weeklyStats.map((day) => {
-                      const serverValues = selectedServers.map((server) => day.valuesByServer[server.id] ?? 0);
+                      const serverValues = scheduleServers.map((server) => day.valuesByServer[server.id] ?? 0);
                       const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
                       const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
                       const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
-                      const statusValues = selectedServers.map((server) => day.statusesByServer[server.id] ?? "");
+                      const statusValues = scheduleServers.map((server) => day.statusesByServer[server.id] ?? "");
                       const allSameStatus = statusValues.length > 0 && statusValues.every((value) => value === statusValues[0]);
                       const baseStatus = allSameStatus ? statusValues[0] ?? "" : "";
                       const draftStatus = rangeStatusDrafts[day.key] ?? baseStatus;
@@ -1534,7 +1582,7 @@ export default function SendingPage() {
                         </td>
                         <td className="px-3 py-3 text-right"><button onClick={() => setDrawerServerId(server.id)} className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#6B7280] hover:bg-[#F1F5F9]"><MoreHorizontal className="h-4 w-4" /></button></td>
                       </tr>
-                      {server.id === selectedStatsAnchorId && selectedServers.length > 0 && (
+                      {server.id === selectedStatsAnchorId && scheduleServers.length > 0 && (
                         <tr className="border-b border-[#DCE3F0] bg-[#F8FAFC]">
                           <td colSpan={tableColumnCount} className="sticky left-0 z-30 px-4 py-4">
                             <div className="w-[calc(100vw-208px)] max-w-[calc(100vw-208px)] overflow-hidden rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -1542,13 +1590,13 @@ export default function SendingPage() {
                                 <div className="order-2 min-w-[220px] flex-1">
                                   <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
                                   <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                                    {allFilteredServersSelected
-                                      ? `${selectedStatsWindow.label} schedule for all ${selectedServers.length} filtered servers`
-                                      : selectedServers.length === 1
-                                        ? `${selectedStatsWindow.label} for ${selectedServers[0].name}`
-                                        : `${selectedStatsWindow.label} across ${selectedServers.length} selected servers`}
+                                    {selectedServers.length === 0
+                                      ? `${selectedStatsWindow.label} schedule for all ${scheduleServers.length} filtered servers`
+                                      : scheduleServers.length === 1
+                                        ? `${selectedStatsWindow.label} for ${scheduleServers[0].name}`
+                                        : `${selectedStatsWindow.label} across ${scheduleServers.length} selected servers`}
                                   </p>
-                                  <p className="mt-1 text-[11px] font-medium text-[#6B7280]">Daily edits are applied to the selected server{selectedServers.length === 1 ? "" : "s"} only.</p>
+                                  <p className="mt-1 text-[11px] font-medium text-[#6B7280]">Daily edits are applied to the selected server{scheduleServers.length === 1 ? "" : "s"} only.</p>
                                 </div>
                                 <div className="order-1 flex shrink-0 flex-wrap items-end gap-2 rounded-[8px] border border-[#E5E7EB] bg-[#F8FAFC] p-2">
                                   <label className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
@@ -1601,7 +1649,7 @@ export default function SendingPage() {
                                 </div>
                                 {loadingStatsLogs && <span className="text-[12px] font-semibold text-[#4F46E5]">Loading statistics...</span>}
                               </div>
-                              {allFilteredServersSelected ? (
+                              {scheduleServers.length > 0 ? (
                                 <div>
                                   <div className="sticky left-0 z-50 flex w-[310px] max-w-full items-center gap-2 border-t border-r border-[#DCE3F0] bg-white px-3 py-1 shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">
                                     <span className="text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B]">Fill</span>
@@ -1610,10 +1658,15 @@ export default function SendingPage() {
                                     </span>
                                     <input
                                       type="color"
-                                      value={scheduleCellColors[selectedScheduleCell || ""] || "#4F46E5"}
+                                      value={scheduleCellColors[selectedScheduleCell || ""] || savedCellColors.background[selectedScheduleCell || ""] || "#4F46E5"}
                                       onChange={(event) => {
                                         if (!selectedScheduleCell) return;
-                                        setScheduleCellColors((current) => ({ ...current, [selectedScheduleCell]: event.target.value }));
+                                        const nextColor = event.target.value;
+                                        setScheduleCellColors((current) => ({ ...current, [selectedScheduleCell]: nextColor }));
+                                        const separator = selectedScheduleCell.indexOf(":");
+                                        if (separator > 0) {
+                                          saveScheduleCellColor(selectedScheduleCell.slice(0, separator), selectedScheduleCell.slice(separator + 1), { cellColor: nextColor });
+                                        }
                                       }}
                                       disabled={!selectedScheduleCell}
                                       className="h-[28px] w-9 cursor-pointer rounded border border-[#CBD5E1] bg-white p-0 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1622,10 +1675,15 @@ export default function SendingPage() {
                                     <span className="text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B]">Text</span>
                                     <input
                                       type="color"
-                                      value={scheduleCellFontColors[selectedScheduleCell || ""] || "#111827"}
+                                      value={scheduleCellFontColors[selectedScheduleCell || ""] || savedCellColors.font[selectedScheduleCell || ""] || "#111827"}
                                       onChange={(event) => {
                                         if (!selectedScheduleCell) return;
-                                        setScheduleCellFontColors((current) => ({ ...current, [selectedScheduleCell]: event.target.value }));
+                                        const nextColor = event.target.value;
+                                        setScheduleCellFontColors((current) => ({ ...current, [selectedScheduleCell]: nextColor }));
+                                        const separator = selectedScheduleCell.indexOf(":");
+                                        if (separator > 0) {
+                                          saveScheduleCellColor(selectedScheduleCell.slice(0, separator), selectedScheduleCell.slice(separator + 1), { cellFontColor: nextColor });
+                                        }
                                       }}
                                       disabled={!selectedScheduleCell}
                                       className="h-[28px] w-9 cursor-pointer rounded border border-[#CBD5E1] bg-white p-0 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1695,8 +1753,8 @@ export default function SendingPage() {
                                           const savingKey = `schedule:${row.id}:${cell.key}`;
                                           const baseCellValue = cell.sent > 0 ? String(cell.sent) : cell.note || "";
                                           const sentDraft = scheduleDailyDrafts[draftKey] ?? baseCellValue;
-                                          const cellColor = scheduleCellColors[draftKey];
-                                          const fontColor = scheduleCellFontColors[draftKey] || "#111827";
+                                          const cellColor = scheduleCellColors[draftKey] || savedCellColors.background[draftKey];
+                                          const fontColor = scheduleCellFontColors[draftKey] || savedCellColors.font[draftKey] || "#111827";
                                           const sentChanged = sentDraft !== baseCellValue;
                                           const selectedCell = selectedScheduleCell === draftKey;
                                           const saveDraft = () =>
@@ -1869,11 +1927,11 @@ export default function SendingPage() {
                                       </thead>
                                       <tbody>
                                         {weeklyStats.map((day) => {
-                                          const serverValues = selectedServers.map((server) => day.valuesByServer[server.id] ?? 0);
+                                          const serverValues = scheduleServers.map((server) => day.valuesByServer[server.id] ?? 0);
                                           const allSame = serverValues.length > 0 && serverValues.every((value) => value === serverValues[0]);
                                           const baseValue = allSame ? String(serverValues[0] ?? 0) : "";
                                           const draftValue = rangeDailyDrafts[day.key] ?? baseValue;
-                                          const statusValues = selectedServers.map((server) => day.statusesByServer[server.id] ?? "");
+                                          const statusValues = scheduleServers.map((server) => day.statusesByServer[server.id] ?? "");
                                           const allSameStatus = statusValues.length > 0 && statusValues.every((value) => value === statusValues[0]);
                                           const baseStatus = allSameStatus ? statusValues[0] ?? "" : "";
                                           const draftStatus = rangeStatusDrafts[day.key] ?? baseStatus;
