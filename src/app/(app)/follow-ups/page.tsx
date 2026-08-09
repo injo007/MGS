@@ -96,7 +96,6 @@ export default function FollowUpsPage() {
   }, []);
 
   const now = mounted ? new Date() : new Date(0);
-  const today = mounted ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : new Date(0);
 
   const overdue = data.filter((item) => item.priority === "overdue").length;
   const dueToday = data.filter((item) => item.priority === "due_today").length;

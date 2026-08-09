@@ -11,8 +11,6 @@ import {
   uniqueIndex,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
-
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export const contactStatusEnum = pgEnum("contact_status", [

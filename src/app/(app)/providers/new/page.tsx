@@ -205,6 +205,7 @@ function NewProviderForm() {
     if (!session?.user) return;
 
     if (!isAdmin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restrict user list to self for non-admins
       setUsers(currentUserId ? [{ id: currentUserId, name: currentUserName }] : []);
       return;
     }
@@ -222,6 +223,7 @@ function NewProviderForm() {
   useEffect(() => {
     if (!editId) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag before the async fetch
     setLoadingEdit(true);
     fetch(`/api/providers/${editId}`)
       .then(async (res) => {
@@ -387,8 +389,7 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">Category</label>
                 <select
-                  value={form.watch("category") || ""}
-                  onChange={(e) => { if (e.target.value) form.setValue("category", e.target.value) }}
+                  {...form.register("category")}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="">Select...</option>
@@ -424,8 +425,7 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">Contact Status</label>
                 <select
-                  value={form.watch("contactStatus") || ""}
-                  onChange={(e) => { if (e.target.value) form.setValue("contactStatus", e.target.value) }}
+                  {...form.register("contactStatus")}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="not_contacted">Not Contacted</option>
@@ -451,8 +451,7 @@ function NewProviderForm() {
                   )}
                 </div>
                 <select
-                  value={form.watch("responseStatus") || ""}
-                  onChange={(e) => { if (e.target.value) form.setValue("responseStatus", e.target.value) }}
+                  {...form.register("responseStatus")}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="not_sent">Not Sent</option>
@@ -464,8 +463,7 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">Decision</label>
                 <select
-                  value={form.watch("decision") || ""}
-                  onChange={(e) => { if (e.target.value) form.setValue("decision", e.target.value) }}
+                  {...form.register("decision")}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="pending">Pending</option>
@@ -488,10 +486,9 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">Port 25 Status</label>
                 <select
-                  value={form.watch("port25Status") || ""}
+                  {...form.register("port25Status")}
                   onChange={(e) => {
                     const value = e.target.value;
-                    if (!value) return;
                     form.setValue("port25Status", value);
                     if (value === "available") form.setValue("mailServerAllowed", true);
                     if (value === "blocked") form.setValue("mailServerAllowed", false);
@@ -506,8 +503,7 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">PTR / rDNS</label>
                 <select
-                  value={form.watch("ptrStatus") || ""}
-                  onChange={(e) => { if (e.target.value) form.setValue("ptrStatus", e.target.value) }}
+                  {...form.register("ptrStatus")}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="configured">Configured</option>
@@ -529,8 +525,7 @@ function NewProviderForm() {
               <label className="flex items-center gap-2 text-[13px] text-[#374151] cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={!!form.watch("ipv4Available")}
-                  onChange={(e) => form.setValue("ipv4Available", e.target.checked)}
+                  {...form.register("ipv4Available")}
                   className="h-4 w-4 rounded border-[#D1D5DB] text-[#4F46E5] focus:ring-[#4F46E5]/20"
                 />
                 IPv4 Available
@@ -538,8 +533,7 @@ function NewProviderForm() {
               <label className="flex items-center gap-2 text-[13px] text-[#374151] cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={!!form.watch("ipv6Available")}
-                  onChange={(e) => form.setValue("ipv6Available", e.target.checked)}
+                  {...form.register("ipv6Available")}
                   className="h-4 w-4 rounded border-[#D1D5DB] text-[#4F46E5] focus:ring-[#4F46E5]/20"
                 />
                 IPv6 Available
@@ -547,8 +541,7 @@ function NewProviderForm() {
               <label className="flex items-center gap-2 text-[13px] text-[#374151] cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={!!form.watch("mailServerAllowed")}
-                  onChange={(e) => form.setValue("mailServerAllowed", e.target.checked)}
+                  {...form.register("mailServerAllowed")}
                   className="h-4 w-4 rounded border-[#D1D5DB] text-[#4F46E5] focus:ring-[#4F46E5]/20"
                 />
                 Mail Server Allowed
@@ -596,8 +589,7 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">Billing Method</label>
                 <select
-                  value={form.watch("billingMethod") || ""}
-                  onChange={(e) => form.setValue("billingMethod", e.target.value || undefined)}
+                  {...form.register("billingMethod", { setValueAs: (value) => (value === "" ? undefined : value) })}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="">Select...</option>
@@ -643,8 +635,7 @@ function NewProviderForm() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.watch("hourlyBilling") || false}
-                  onChange={(e) => form.setValue("hourlyBilling", e.target.checked)}
+                  {...form.register("hourlyBilling")}
                   className="h-3.5 w-3.5 rounded border-[#D1D5DB]"
                 />
                 <span className="text-[13px] text-[#374151]">Hourly Billing</span>
@@ -652,8 +643,7 @@ function NewProviderForm() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.watch("monthlyBilling") || false}
-                  onChange={(e) => form.setValue("monthlyBilling", e.target.checked)}
+                  {...form.register("monthlyBilling")}
                   className="h-3.5 w-3.5 rounded border-[#D1D5DB]"
                 />
                 <span className="text-[13px] text-[#374151]">Monthly Billing</span>
@@ -705,8 +695,7 @@ function NewProviderForm() {
               <div className="space-y-1.5">
                 <label className="text-[13px] font-medium text-[#374151]">Assigned Owner</label>
                 <select
-                  value={form.watch("assignedUserId") || ""}
-                  onChange={(e) => form.setValue("assignedUserId", e.target.value || undefined)}
+                  {...form.register("assignedUserId", { setValueAs: (value) => (value === "" ? undefined : value) })}
                   className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                 >
                   <option value="">Unassigned</option>
@@ -719,8 +708,7 @@ function NewProviderForm() {
                 <div className="space-y-1.5">
                   <label className="text-[13px] font-medium text-[#374151]">Contacted By</label>
                   <select
-                    value={form.watch("manualContactedByUserId") || ""}
-                    onChange={(e) => form.setValue("manualContactedByUserId", e.target.value || undefined)}
+                    {...form.register("manualContactedByUserId", { setValueAs: (value) => (value === "" ? undefined : value) })}
                     className="flex h-[34px] w-full rounded-[7px] border border-[#E5E7EB] bg-white px-3 text-[13px] text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/20 focus:border-[#4F46E5] transition-colors"
                   >
                     <option value="">Not set manually</option>

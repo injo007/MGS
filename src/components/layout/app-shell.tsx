@@ -16,6 +16,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(SIDEBAR_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe localStorage read
       if (stored !== null) setCollapsed(stored === "true");
     } catch {}
     setMounted(true);

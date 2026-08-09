@@ -356,7 +356,7 @@ export default function SendingPage() {
   const [drawerServerId, setDrawerServerId] = useState<string | null>(null);
   const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
   const [sentDrafts, setSentDrafts] = useState<Record<string, string>>({});
-  const [savingLimits, setSavingLimits] = useState<Record<string, boolean>>({});
+  const [, setSavingLimits] = useState<Record<string, boolean>>({});
   const [savingSentToday, setSavingSentToday] = useState<Record<string, boolean>>({});
   const [savingWeeklyStats, setSavingWeeklyStats] = useState<Record<string, boolean>>({});
   const [statsRange, setStatsRange] = useState<StatsRangeKey>("week");

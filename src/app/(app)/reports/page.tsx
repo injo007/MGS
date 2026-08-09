@@ -164,6 +164,7 @@ export default function ReportsPage() {
   const [trackingEnd, setTrackingEnd] = useState(() => new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag before the async fetch
     setLoading(true);
     const params = new URLSearchParams();
     if (isAdmin && selectedUserId !== "all") params.set("userId", selectedUserId);

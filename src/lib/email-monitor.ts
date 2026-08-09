@@ -70,7 +70,7 @@ export async function processEmailResponse(emailData: EmailData): Promise<EmailP
 
   const responseDate = new Date(emailData.date);
 
-  const responseType = inferResponseType(emailData.subject, emailData.body) as any;
+  const responseType = inferResponseType(emailData.subject, emailData.body);
   const providerUpdate = providerUpdateForResponse(responseType, responseDate);
 
   const [response] = await db

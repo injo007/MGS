@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { campaigns, auditLogs } from "@/db/schema";
+import { campaigns, auditLogs, campaignStatusEnum } from "@/db/schema";
 import { eq, ilike, desc, asc, and, count, sql } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -25,11 +25,20 @@ export async function GET(request: Request) {
       sql`(${ilike(campaigns.name, `%${search}%`)} OR ${ilike(campaigns.description, `%${search}%`)})`
     );
   }
-  if (status) conditions.push(eq(campaigns.status, status as any));
+  if (status) conditions.push(eq(campaigns.status, status as (typeof campaignStatusEnum)["enumValues"][number]));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const sortColumn = (campaigns as any)[sortBy] || campaigns.createdAt;
+  const sortColumns = {
+    name: campaigns.name,
+    description: campaigns.description,
+    status: campaigns.status,
+    startDate: campaigns.startDate,
+    endDate: campaigns.endDate,
+    createdAt: campaigns.createdAt,
+    updatedAt: campaigns.updatedAt,
+  } as const;
+  const sortColumn = sortColumns[sortBy as keyof typeof sortColumns] ?? campaigns.createdAt;
   const orderFn = sortOrder === "asc" ? asc : desc;
 
   const [data, totalResult] = await Promise.all([

@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ArrowRight,
   File,
-  X,
   AlertTriangle,
   Loader2,
   Check,
@@ -24,6 +23,8 @@ const ENTITY_OPTIONS = [
 ];
 
 type ImportMode = "create" | "update" | "skip_existing";
+
+type ImportRow = Record<string, string | number | boolean | null | undefined>;
 
 const ENTITY_FIELDS: Record<string, { key: string; label: string; required: boolean }[]> = {
   providers: [
@@ -102,7 +103,7 @@ export default function ImportsPage() {
   const [mode, setMode] = useState<ImportMode>("create");
   const [fileName, setFileName] = useState<string | null>(null);
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
-  const [rawRows, setRawRows] = useState<Record<string, any>[]>([]);
+  const [rawRows, setRawRows] = useState<ImportRow[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [validationErrors, setValidationErrors] = useState<{ row: number; reason: string }[]>([]);
   const [importResult, setImportResult] = useState<{
@@ -128,9 +129,9 @@ export default function ImportsPage() {
     setImporting(false);
   };
 
-  const parseCSV = async (text: string): Promise<{ headers: string[]; rows: Record<string, any>[] }> => {
+  const parseCSV = async (text: string): Promise<{ headers: string[]; rows: ImportRow[] }> => {
     const Papa = await import("papaparse");
-    const parsed = Papa.parse<Record<string, any>>(text, {
+    const parsed = Papa.parse<ImportRow>(text, {
       header: true,
       skipEmptyLines: true,
       transformHeader: (header) => header.trim(),
@@ -139,7 +140,7 @@ export default function ImportsPage() {
     return { headers, rows: parsed.data || [] };
   };
 
-  const parseJSON = (text: string): { headers: string[]; rows: Record<string, any>[] } => {
+  const parseJSON = (text: string): { headers: string[]; rows: ImportRow[] } => {
     try {
       const data = JSON.parse(text);
       if (!Array.isArray(data) || data.length === 0) return { headers: [], rows: [] };
@@ -149,6 +150,24 @@ export default function ImportsPage() {
       return { headers: [], rows: [] };
     }
   };
+
+  const autoMap = useCallback((headers: string[]) => {
+    const auto: Record<string, string> = {};
+    const fields = entity ? ENTITY_FIELDS[entity] || [] : [];
+    for (const h of headers) {
+      const normalized = h.toLowerCase().replace(/[\s\-\/]+/g, "_").replace(/[^a-z0-9_]/g, "");
+      const match = fields.find(
+        (f) =>
+          f.key === normalized ||
+          f.key.replace(/_/g, "") === normalized.replace(/_/g, "") ||
+          f.label.toLowerCase().replace(/[\s\-\/]+/g, "_") === normalized
+      );
+      if (match) {
+        auto[h] = match.key;
+      }
+    }
+    setMappings(auto);
+  }, [entity]);
 
   const handleFile = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,7 +196,7 @@ export default function ImportsPage() {
           const workbook = XLSX.read(text, { type: "binary" });
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+          const jsonData = XLSX.utils.sheet_to_json<ImportRow>(sheet, { defval: "" });
           if (jsonData.length > 0) {
             const headers = [...new Set(jsonData.flatMap((r) => Object.keys(r)))];
             setRawHeaders(headers);
@@ -193,26 +212,8 @@ export default function ImportsPage() {
       }
       e.target.value = "";
     },
-    [entity]
+    [autoMap]
   );
-
-  const autoMap = (headers: string[]) => {
-    const auto: Record<string, string> = {};
-    const fields = entity ? ENTITY_FIELDS[entity] || [] : [];
-    for (const h of headers) {
-      const normalized = h.toLowerCase().replace(/[\s\-\/]+/g, "_").replace(/[^a-z0-9_]/g, "");
-      const match = fields.find(
-        (f) =>
-          f.key === normalized ||
-          f.key.replace(/_/g, "") === normalized.replace(/_/g, "") ||
-          f.label.toLowerCase().replace(/[\s\-\/]+/g, "_") === normalized
-      );
-      if (match) {
-        auto[h] = match.key;
-      }
-    }
-    setMappings(auto);
-  };
 
   const runValidation = () => {
     const errors: { row: number; reason: string }[] = [];
@@ -221,7 +222,7 @@ export default function ImportsPage() {
 
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
-      const mapped: Record<string, any> = {};
+      const mapped: ImportRow = {};
       for (const [fileCol, dbCol] of Object.entries(mappings)) {
         if (row[fileCol] !== undefined) mapped[dbCol] = row[fileCol];
       }
@@ -240,7 +241,7 @@ export default function ImportsPage() {
     try {
       // Map rows using column mappings
       const mappedRows = rawRows.map((row) => {
-        const mapped: Record<string, any> = {};
+        const mapped: ImportRow = {};
         for (const [fileCol, dbCol] of Object.entries(mappings)) {
           if (row[fileCol] !== undefined && row[fileCol] !== "") {
             mapped[dbCol] = row[fileCol];
@@ -258,8 +259,8 @@ export default function ImportsPage() {
       const data = await res.json();
       setImportResult(data);
       setStep(4);
-    } catch (err: any) {
-      setImportResult({ created: 0, updated: 0, skipped: 0, failed: rawRows.length, errors: [{ row: 0, reason: err.message }] });
+    } catch (err) {
+      setImportResult({ created: 0, updated: 0, skipped: 0, failed: rawRows.length, errors: [{ row: 0, reason: err instanceof Error ? err.message : String(err) }] });
       setStep(4);
     } finally {
       setImporting(false);
@@ -399,7 +400,7 @@ export default function ImportsPage() {
                   disabled={!entity}
                   onClick={(e) => {
                     e.stopPropagation();
-                    entity && fileInputRef.current?.click();
+                    if (entity) fileInputRef.current?.click();
                   }}
                   className="h-[34px] rounded-[7px] bg-[#4F46E5] hover:bg-[#4338CA] px-3.5 text-[13px] font-medium text-white transition-colors inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >

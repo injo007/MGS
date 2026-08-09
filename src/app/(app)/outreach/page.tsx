@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -56,7 +56,7 @@ export default function OutreachPage() {
     followUpDate: "",
   });
 
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     const params = new URLSearchParams();
     params.set("pageSize", "100");
     if (channelFilter !== "all") params.set("channel", channelFilter);
@@ -67,9 +67,9 @@ export default function OutreachPage() {
       .then((res) => { if (!res.ok) throw new Error("Failed to fetch"); return res.json(); })
       .then((json) => { setData(json.data); setLoading(false); })
       .catch((err) => { setError(err.message); setLoading(false); });
-  };
+  }, [channelFilter, resultFilter, contactedByFilter]);
 
-  useEffect(() => { fetchData(); }, [channelFilter, resultFilter, contactedByFilter]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     if (showCreate) {
@@ -89,7 +89,7 @@ export default function OutreachPage() {
     try {
       const url = editingItem ? `/api/outreach/${editingItem.id}` : "/api/outreach";
       const method = editingItem ? "PUT" : "POST";
-      const body: Record<string, any> = {
+      const body: Record<string, unknown> = {
         providerId: form.providerId,
         channel: form.channel,
         recipient: form.recipient || null,

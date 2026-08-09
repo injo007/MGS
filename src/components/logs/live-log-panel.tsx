@@ -107,12 +107,14 @@ export function LiveLogPanel() {
 
   useEffect(() => {
     if (!isAdmin) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load of the polling interval
     fetchLogs(true);
     const interval = window.setInterval(() => fetchLogs(true), 5000);
     return () => window.clearInterval(interval);
   }, [fetchLogs, isAdmin]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset unread counter when panel opens
     if (isOpen) setUnread(0);
   }, [isOpen]);
 

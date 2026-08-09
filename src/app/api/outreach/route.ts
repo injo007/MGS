@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { outreachLogs, providers, users, auditLogs } from "@/db/schema";
+import { outreachLogs, providers, users, auditLogs, contactChannelEnum, sendResultEnum } from "@/db/schema";
 import { eq, desc, asc, and, count } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -22,13 +22,25 @@ export async function GET(request: Request) {
 
   const conditions = [];
   if (providerId) conditions.push(eq(outreachLogs.providerId, providerId));
-  if (channel) conditions.push(eq(outreachLogs.channel, channel as any));
-  if (sendResult) conditions.push(eq(outreachLogs.sendResult, sendResult as any));
+  if (channel) conditions.push(eq(outreachLogs.channel, channel as (typeof contactChannelEnum)["enumValues"][number]));
+  if (sendResult) conditions.push(eq(outreachLogs.sendResult, sendResult as (typeof sendResultEnum)["enumValues"][number]));
   if (sentById) conditions.push(eq(outreachLogs.sentById, sentById));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const sortColumn = (outreachLogs as any)[sortBy] || outreachLogs.createdAt;
+  const sortColumns = {
+    date: outreachLogs.date,
+    channel: outreachLogs.channel,
+    recipient: outreachLogs.recipient,
+    subject: outreachLogs.subject,
+    sendResult: outreachLogs.sendResult,
+    responseDate: outreachLogs.responseDate,
+    nextAction: outreachLogs.nextAction,
+    followUpDate: outreachLogs.followUpDate,
+    createdAt: outreachLogs.createdAt,
+    updatedAt: outreachLogs.updatedAt,
+  } as const;
+  const sortColumn = sortColumns[sortBy as keyof typeof sortColumns] ?? outreachLogs.createdAt;
   const orderFn = sortOrder === "asc" ? asc : desc;
 
   const [data, totalResult] = await Promise.all([

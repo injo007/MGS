@@ -90,11 +90,6 @@ interface ProvidersResponse {
   totalPages: number;
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(Math.round(value || 0));
 }

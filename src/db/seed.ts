@@ -166,7 +166,7 @@ interface ProviderResponseJson {
   decision_recommendation?: string;
 }
 
-function jsonVal(v: any): string | null {
+function jsonVal(v: unknown): string | null {
   if (v === undefined || v === null || v === "") return null;
   return String(v);
 }
