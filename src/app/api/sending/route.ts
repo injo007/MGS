@@ -25,6 +25,7 @@ export async function GET(request: Request) {
   const campaignId = searchParams.get("campaignId");
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
+  const all = searchParams.get("all") === "1";
 
   const conditions = [];
   const admin = isAdmin(session);
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   if (campaignId) conditions.push(eq(sendingLogs.campaignId, campaignId));
   if (startDate) conditions.push(gte(sendingLogs.date, new Date(`${startDate.slice(0, 10)}T00:00:00.000Z`)));
   if (endDate) conditions.push(lte(sendingLogs.date, new Date(`${endDate.slice(0, 10)}T23:59:59.999Z`)));
-  if (!admin) {
+  if (!admin && !all) {
     conditions.push(sql`exists (select 1 from ${serverUsers} where ${serverUsers.serverId} = ${sendingLogs.serverId} and ${serverUsers.userId} = ${currentUserId})`);
   }
 

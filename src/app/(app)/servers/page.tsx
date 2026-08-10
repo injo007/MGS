@@ -111,7 +111,6 @@ interface UserOption {
   email: string;
 }
 
-const PAGE_SIZE = 10;
 const TABS = [
   { key: "all", label: "All Servers" },
   { key: "expiring", label: "Expiring Soon" },
@@ -330,6 +329,7 @@ function ServersPageContent() {
   const [assignedFilter, setAssignedFilter] = useState("all");
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [showCreate, setShowCreate] = useState(false);
   const [editingServer, setEditingServer] = useState<ServerRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -486,14 +486,14 @@ function ServersPageContent() {
     });
   }, [activeTab, assignedFilter, billingFilter, providerFilter, regionFilter, search, servers, statusFilter, typeFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
     setSelected([]);
-  }, [activeTab, providerFilter, statusFilter, regionFilter, typeFilter, billingFilter, assignedFilter, search]);
+  }, [activeTab, providerFilter, statusFilter, regionFilter, typeFilter, billingFilter, assignedFilter, search, pageSize]);
 
   const nonArchivedServers = useMemo(() => servers.filter((server) => server.status !== "archived"), [servers]);
   const activeCount = nonArchivedServers.filter((server) => server.status === "active").length;
@@ -1424,17 +1424,32 @@ function ServersPageContent() {
         </div>
 
         <div className="flex items-center justify-between px-4 py-3">
-          <p className="text-[12px] text-[#6B7280]">Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} servers</p>
-          <div className="flex items-center gap-1">
-            <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            {Array.from({ length: Math.min(pageCount, 5) }, (_, index) => index + 1).map((number) => (
-              <button key={number} onClick={() => setPage(number)} className={`h-8 min-w-8 rounded-[7px] px-2 text-[12px] font-semibold ${page === number ? "bg-[#4F46E5] text-white" : "border border-[#E5E7EB] bg-white text-[#374151]"}`}>{number}</button>
-            ))}
-            <button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40">
-              <ChevronRight className="h-4 w-4" />
-            </button>
+          <p className="text-[12px] text-[#6B7280]">Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} servers</p>
+          <div className="flex items-center gap-2">
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setPage(1);
+                setSelected([]);
+              }}
+              className="h-7 rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#374151]"
+            >
+              <option value={25}>25 servers</option>
+              <option value={50}>50 servers</option>
+              <option value={100}>100 servers</option>
+            </select>
+            <div className="flex items-center gap-1">
+              <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {Array.from({ length: Math.min(pageCount, 5) }, (_, index) => index + 1).map((number) => (
+                <button key={number} onClick={() => setPage(number)} className={`h-8 min-w-8 rounded-[7px] px-2 text-[12px] font-semibold ${page === number ? "bg-[#4F46E5] text-white" : "border border-[#E5E7EB] bg-white text-[#374151]"}`}>{number}</button>
+              ))}
+              <button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

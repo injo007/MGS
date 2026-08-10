@@ -228,11 +228,12 @@ export async function GET(request: Request) {
   const status = searchParams.get("status");
   const providerId = searchParams.get("providerId");
   const assignedUserId = searchParams.get("assignedUserId");
+  const all = searchParams.get("all") === "1";
 
   const conditions = [];
   const admin = isAdmin(session);
   const currentUserId = sessionUserId(session);
-  const scopedUserId = admin ? assignedUserId : currentUserId;
+  const scopedUserId = all ? null : admin ? assignedUserId : currentUserId;
 
   if (search) {
     conditions.push(

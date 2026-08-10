@@ -824,10 +824,9 @@ export default function ProvidersPage() {
                 }}
                 className="h-7 rounded border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#374151]"
               >
-                <option value={20}>20 rows</option>
+                <option value={25}>25 rows</option>
                 <option value={50}>50 rows</option>
                 <option value={100}>100 rows</option>
-                <option value={500}>500 rows</option>
               </select>
               <button
                 disabled={page === 1}

@@ -398,8 +398,8 @@ export default function SendingPage() {
     setLoading(true);
     try {
       const [serversRes, sendingRes] = await Promise.all([
-        fetch("/api/servers?pageSize=200&sortBy=createdAt&sortOrder=desc"),
-        fetch("/api/sending?pageSize=1000"),
+        fetch("/api/servers?pageSize=1000&all=1&sortBy=createdAt&sortOrder=desc"),
+        fetch("/api/sending?pageSize=1000&all=1"),
       ]);
       const serversJson = serversRes.ok ? await serversRes.json() : { data: [] };
       const sendingJson = sendingRes.ok ? await sendingRes.json() : { data: [] };
@@ -569,6 +569,7 @@ export default function SendingPage() {
       pageSize: "5000",
       sortBy: "date",
       sortOrder: "asc",
+      all: "1",
       serverIds: serverIds.join(","),
       startDate: selectedStatsWindow.startKey,
       endDate: selectedStatsWindow.endKey,
@@ -979,6 +980,7 @@ export default function SendingPage() {
       pageSize: "5000",
       sortBy: "date",
       sortOrder: "asc",
+      all: "1",
       serverIds: serverIds.join(","),
       startDate: selectedStatsWindow.startKey,
       endDate: selectedStatsWindow.endKey,
