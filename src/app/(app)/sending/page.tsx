@@ -29,12 +29,7 @@ import {
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ReferenceDot,
   ResponsiveContainer,
   Tooltip,
@@ -115,7 +110,6 @@ const BASE_TABS = [
   { key: "paused", label: "Paused" },
 ];
 const WARMUP_TAB = { key: "warmup", label: "Warmup" };
-const USER_CHART_COLORS = ["#4F46E5", "#16A34A", "#EA580C", "#0891B2", "#8B5CF6", "#DC2626"];
 const DAILY_STATUS_OPTIONS: DailyStatusOption[] = [
   { value: "normal", label: "Normal" },
   { value: "active", label: "Active" },
@@ -266,15 +260,6 @@ function dayRange(startKey: string, endKey: string) {
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
-}
-
-function weekStartKey(value: Date) {
-  const date = new Date(value);
-  const dayOfWeek = date.getDay();
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  date.setDate(date.getDate() + mondayOffset);
-  date.setHours(12, 0, 0, 0);
-  return date.toISOString().slice(0, 10);
 }
 
 function warmupStage(server: ServerRow) {
@@ -603,13 +588,6 @@ export default function SendingPage() {
     return { actual, planned, sentToday, delivered, bounces, complaints, ts04 };
   }, [enriched]);
 
-  const errorBreakdown = [
-    { name: "Bounce", value: totals.bounces, color: "#EF4444", rate: pct(totals.bounces, totals.actual, 2) },
-    { name: "TSS04", value: totals.ts04, color: "#F97316", rate: pct(totals.ts04, totals.actual, 2) },
-    { name: "Complaints", value: totals.complaints, color: "#8B5CF6", rate: pct(totals.complaints, totals.actual, 2) },
-    { name: "Deferrals", value: Math.round(totals.bounces * 0.2), color: "#2563EB", rate: pct(Math.round(totals.bounces * 0.2), totals.actual, 2) },
-  ];
-
   const weeklyStats = useMemo(() => {
     const serverIds = scheduleServers.map((server) => server.id);
     const rows = selectedStatsWindow.days.map((day) => ({
@@ -768,47 +746,6 @@ export default function SendingPage() {
     }
     return { background, font };
   }, [statsLogs]);
-
-  const currentMonthUserChart = useMemo(() => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const weeks: Record<string, string | number>[] = [];
-    const cursor = new Date(monthStart);
-    const seenWeeks = new Set<string>();
-
-    while (cursor <= monthEnd) {
-      const key = weekStartKey(cursor);
-      if (!seenWeeks.has(key)) {
-        seenWeeks.add(key);
-        weeks.push({
-          key,
-          week: new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        });
-      }
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
-    const byWeek = new Map(weeks.map((week) => [String(week.key), week]));
-    const users = new Map<string, string>();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-
-    for (const log of logs) {
-      const date = new Date(log.date);
-      if (date.getMonth() !== month || date.getFullYear() !== year) continue;
-      const userName = log.mailerName || "Unassigned";
-      users.set(userName, userName);
-      const bucket = byWeek.get(weekStartKey(date));
-      if (bucket) bucket[userName] = Number(bucket[userName] || 0) + Number(log.actualSends || 0);
-    }
-
-    return {
-      weeks,
-      users: Array.from(users.keys()).slice(0, 6),
-      label: now.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-    };
-  }, [logs]);
 
   const tabCount = (key: string) => {
     if (key === "all") return enriched.length;
@@ -1162,6 +1099,30 @@ export default function SendingPage() {
     setDrawerForm((current) => ({ ...current, [key]: !current[key] }));
   };
 
+  const statisticsTrendCard = (
+    <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[13px] font-bold text-[#111827]">Statistics Trend</h3>
+        <span className="rounded-[6px] border border-[#E5E7EB] px-2 py-1 text-[11px] text-[#6B7280]">Last 7 days</span>
+      </div>
+      <ResponsiveContainer width="100%" height={150}>
+        <AreaChart data={trend}>
+          <defs>
+            <linearGradient id="sendingFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.14} />
+              <stop offset="100%" stopColor="#4F46E5" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="date" hide />
+          <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} width={35} />
+          <Tooltip contentStyle={{ fontSize: "12px", borderRadius: "8px", border: "1px solid #E5E7EB" }} />
+          <Area type="monotone" dataKey="sent" stroke="#4F46E5" strokeWidth={2} fill="url(#sendingFill)" dot={{ r: 3, fill: "#fff", stroke: "#4F46E5", strokeWidth: 2 }} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-start">
@@ -1212,7 +1173,7 @@ export default function SendingPage() {
         <KpiCard label="Paused Servers" value={String(tabCount("paused"))} sub="manual or automatic" icon={Pause} tone="slate" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_220px]">
+      <div className="grid grid-cols-1 gap-4">
         <div className="space-y-4 min-w-0">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className={`flex items-center justify-between rounded-[8px] border px-4 py-3 text-[13px] font-semibold text-[#92400E] ${alertFilter === "bounce" ? "border-[#F97316] bg-[#FFEDD5] ring-2 ring-[#F97316]/15" : "border-[#FED7AA] bg-[#FFF7ED]"}`}>
@@ -1387,6 +1348,8 @@ export default function SendingPage() {
                   </article>
                 ))
               )}
+
+              {statisticsTrendCard}
 
               {scheduleServers.length > 0 && (
                 <div className="rounded-[10px] border border-[#DCE3F0] bg-white p-4">
@@ -1587,7 +1550,9 @@ export default function SendingPage() {
                       {server.id === selectedStatsAnchorId && scheduleServers.length > 0 && (
                         <tr className="border-b border-[#DCE3F0] bg-[#F8FAFC]">
                           <td colSpan={tableColumnCount} className="sticky left-0 z-30 px-4 py-4">
-                            <div className="w-full max-w-full overflow-hidden rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                            <div className="space-y-4">
+                              {statisticsTrendCard}
+                              <div className="w-full max-w-full overflow-hidden rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                               <div className="flex flex-wrap items-center gap-3 border-b border-[#E5E7EB] px-4 py-3">
                                 <div className="order-2 min-w-[220px] flex-1">
                                   <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
@@ -2017,6 +1982,7 @@ export default function SendingPage() {
                                 </div>
                               )}
                             </div>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -2055,102 +2021,6 @@ export default function SendingPage() {
             </div>
           </div>
         </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[13px] font-bold text-[#111827]">Sending By User</h3>
-              <span className="rounded-[6px] border border-[#E5E7EB] px-2 py-1 text-[11px] text-[#6B7280]">{currentMonthUserChart.label}</span>
-            </div>
-            <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={currentMonthUserChart.weeks} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} width={35} />
-                <Tooltip contentStyle={{ fontSize: "12px", borderRadius: "8px", border: "1px solid #E5E7EB" }} />
-                {currentMonthUserChart.users.map((user, index) => (
-                  <Bar
-                    key={user}
-                    dataKey={user}
-                    stackId="users"
-                    fill={USER_CHART_COLORS[index % USER_CHART_COLORS.length]}
-                    radius={index === currentMonthUserChart.users.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {currentMonthUserChart.users.length === 0 ? (
-                <span className="text-[11px] text-[#6B7280]">No sending stats for this month</span>
-              ) : currentMonthUserChart.users.map((user, index) => (
-                <span key={user} className="inline-flex items-center gap-1 text-[11px] text-[#6B7280]">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: USER_CHART_COLORS[index % USER_CHART_COLORS.length] }} />
-                  {user}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[13px] font-bold text-[#111827]">Error Breakdown</h3>
-              <span className="rounded-[6px] border border-[#E5E7EB] px-2 py-1 text-[11px] text-[#6B7280]">Last 7 days</span>
-            </div>
-            <ResponsiveContainer width="100%" height={150}>
-              <PieChart>
-                <Pie data={errorBreakdown} innerRadius={45} outerRadius={65} dataKey="value" stroke="none">
-                  {errorBreakdown.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-2">
-              {errorBreakdown.map((item) => (
-                <div key={item.name} className="flex items-center justify-between text-[12px]">
-                  <span className="inline-flex items-center gap-2 text-[#374151]"><span className="h-2 w-2 rounded-full" style={{ background: item.color }} />{item.name}</span>
-                  <span className="font-semibold text-[#111827]">{item.rate}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[13px] font-bold text-[#111827]">Statistics Trend</h3>
-              <span className="rounded-[6px] border border-[#E5E7EB] px-2 py-1 text-[11px] text-[#6B7280]">Last 7 days</span>
-            </div>
-            <ResponsiveContainer width="100%" height={150}>
-              <AreaChart data={trend}>
-                <defs>
-                  <linearGradient id="sendingFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.14} />
-                    <stop offset="100%" stopColor="#4F46E5" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" hide />
-                <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} width={35} />
-                <Tooltip contentStyle={{ fontSize: "12px", borderRadius: "8px", border: "1px solid #E5E7EB" }} />
-                <Area type="monotone" dataKey="sent" stroke="#4F46E5" strokeWidth={2} fill="url(#sendingFill)" dot={{ r: 3, fill: "#fff", stroke: "#4F46E5", strokeWidth: 2 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-[10px] border border-[#E5E7EB] bg-white p-4">
-            <h3 className="mb-3 text-[13px] font-bold text-[#111827]">Recommended Actions</h3>
-            <div className="space-y-3">
-              {enriched.filter((server) => server.bounceRate > 3 || server.ts04Rate > 1 || server.capacity >= 90).slice(0, 4).map((server) => (
-                <button key={server.id} onClick={() => setDrawerServerId(server.id)} className="flex w-full items-start gap-3 border-b border-[#F1F5F9] pb-3 text-left last:border-0 last:pb-0">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FEF2F2] text-[#DC2626]"><AlertTriangle className="h-3.5 w-3.5" /></span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[12px] font-semibold text-[#111827]">{server.name}</span>
-                    <span className="block text-[11px] text-[#6B7280]">Review thresholds and capacity</span>
-                  </span>
-                </button>
-              ))}
-              {enriched.filter((server) => server.bounceRate > 3 || server.ts04Rate > 1 || server.capacity >= 90).length === 0 && <p className="text-[12px] text-[#6B7280]">No urgent recommendations.</p>}
-            </div>
-          </div>
-        </aside>
       </div>
 
       {drawerServer && (
