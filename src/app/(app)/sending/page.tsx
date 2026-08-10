@@ -108,7 +108,6 @@ type DailyStatusOption = {
   label: string;
 };
 
-const PAGE_SIZE = 10;
 const BASE_TABS = [
   { key: "all", label: "All Servers" },
   { key: "active", label: "Active Servers" },
@@ -347,6 +346,7 @@ export default function SendingPage() {
   const [alertFilter, setAlertFilter] = useState<AlertFilter>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [drawerServerId, setDrawerServerId] = useState<string | null>(null);
   const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
   const [sentDrafts, setSentDrafts] = useState<Record<string, string>>({});
@@ -488,8 +488,8 @@ export default function SendingPage() {
     setSelected([]);
   }, [activeTab, alertFilter, providerFilter, statusFilter, regionFilter, warmupFilter, assignedFilter, search]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
   const allFilteredServersSelected = filtered.length > 0 && filtered.every((server) => selected.includes(server.id));
   let selectedStatsAnchorId: string | null = null;
   for (let index = paginated.length - 1; index >= 0; index--) {
@@ -1212,7 +1212,7 @@ export default function SendingPage() {
         <KpiCard label="Paused Servers" value={String(tabCount("paused"))} sub="manual or automatic" icon={Pause} tone="slate" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_220px]">
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_220px]">
         <div className="space-y-4 min-w-0">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className={`flex items-center justify-between rounded-[8px] border px-4 py-3 text-[13px] font-semibold text-[#92400E] ${alertFilter === "bounce" ? "border-[#F97316] bg-[#FFEDD5] ring-2 ring-[#F97316]/15" : "border-[#FED7AA] bg-[#FFF7ED]"}`}>
@@ -1486,12 +1486,22 @@ export default function SendingPage() {
             </div>
 
             <div className="hidden overflow-x-auto xl:block">
-              <table className="w-full min-w-[1180px]">
+              <table className="w-full min-w-[985px] table-fixed">
                 <thead>
                   <tr className="border-b border-[#E5E7EB]">
                     <th className="w-10 px-4 py-3"></th>
-                    {["Server", "Provider", "Today Volume", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
-                      <th key={header} className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.03em] text-[#4B5563]">{header}</th>
+                    {[
+                      { label: "Server", width: "w-[160px]" },
+                      { label: "Provider", width: "w-[140px]" },
+                      { label: "Today Volume", width: "w-[165px]" },
+                      ...(warmupEnabled ? [{ label: "Warmup Stage", width: "w-[100px]" }] : []),
+                      { label: "Monitoring", width: "w-[80px]" },
+                      { label: "Status", width: "w-[95px]" },
+                      { label: "Last Updated", width: "w-[95px]" },
+                      { label: "Assigned To", width: "w-[150px]" },
+                      { label: "Actions", width: "w-[60px]" },
+                    ].map(({ label, width }) => (
+                      <th key={label} className={`px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.03em] text-[#4B5563] ${width} ${label === "Actions" ? "sticky right-0 z-30 bg-white shadow-[-8px_0_14px_-12px_rgba(15,23,42,0.4)]" : ""}`}>{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1516,19 +1526,19 @@ export default function SendingPage() {
                           <button onClick={() => toggleRow(server.id)}>{selected.includes(server.id) ? <CheckSquare className="h-4 w-4 text-[#4F46E5]" /> : <Square className="h-4 w-4 text-[#CBD5E1]" />}</button>
                         </td>
                         <td className="px-3 py-3">
-                          <button onClick={() => setDrawerServerId(server.id)} className="text-left">
-                            <p className="text-[13px] font-bold text-[#2563EB]">{server.name}</p>
-                            <p className="text-[11px] text-[#6B7280]">{server.location ?? "-"}</p>
+                          <button onClick={() => setDrawerServerId(server.id)} className="block w-full min-w-0 text-left">
+                            <p className="truncate text-[13px] font-bold text-[#2563EB]">{server.name}</p>
+                            <p className="truncate text-[11px] text-[#6B7280]">{server.location ?? "-"}</p>
                           </button>
                         </td>
                         <td className="px-3 py-3">
-                          <div className="flex min-w-[140px] items-center gap-2">
-                            <ProviderLogo name={server.providerName || "Provider"} website={server.providerWebsite} size="sm" className="h-6 w-6 rounded-[5px]" />
+                          <div className="flex w-full min-w-0 items-center gap-2">
+                            <ProviderLogo name={server.providerName || "Provider"} website={server.providerWebsite} size="sm" className="h-6 w-6 shrink-0 rounded-[5px]" />
                             <span className="truncate text-[13px] font-medium text-[#111827]">{server.providerName ?? "-"}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <div className="w-[170px]">
+                          <div className="w-[140px]">
                             <div className="flex items-center gap-1">
                               <input
                                 value={sentDrafts[server.id] ?? "0"}
@@ -1542,9 +1552,9 @@ export default function SendingPage() {
                                   }
                                 }}
                                 disabled={savingSentToday[server.id]}
-                                className="h-[30px] w-[78px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
+                                className="h-[30px] w-[70px] rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] font-semibold text-[#111827] outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15 disabled:opacity-60"
                               />
-                              <span className="text-[11px] font-semibold text-[#6B7280]">/ {server.limit ? formatNumber(server.limit) : "No limit"}</span>
+                              <span className="truncate text-[11px] font-semibold text-[#6B7280]">/ {server.limit ? formatNumber(server.limit) : "No limit"}</span>
                             </div>
                             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E5E7EB]"><div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${Math.min(server.capacity, 100)}%` }} /></div>
                             {sentDrafts[server.id] !== String(server.todaySends ?? 0) && (
@@ -1569,15 +1579,15 @@ export default function SendingPage() {
                         <td className="px-3 py-3 text-[12px] text-[#374151]">{server.agg.lastUpdated ? new Date(server.agg.lastUpdated).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "-"}</td>
                         <td className="px-3 py-3">
                           {server.assignedUsers?.[0] ? (
-                            <div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#EEF2FF] text-[10px] font-bold text-[#4F46E5]">{server.assignedUsers[0].name.charAt(0)}</span><span className="text-[13px] text-[#374151]">{server.assignedUsers[0].name}</span></div>
+                            <div className="flex min-w-0 items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[10px] font-bold text-[#4F46E5]">{server.assignedUsers[0].name.charAt(0)}</span><span className="min-w-0 truncate text-[13px] text-[#374151]">{server.assignedUsers[0].name}</span></div>
                           ) : <span className="text-[13px] text-[#9CA3AF]">-</span>}
                         </td>
-                        <td className="px-3 py-3 text-right"><button onClick={() => setDrawerServerId(server.id)} className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#6B7280] hover:bg-[#F1F5F9]"><MoreHorizontal className="h-4 w-4" /></button></td>
+                        <td className="sticky right-0 z-20 bg-white px-3 py-3 text-right shadow-[-8px_0_14px_-12px_rgba(15,23,42,0.4)]"><button onClick={() => setDrawerServerId(server.id)} className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[#6B7280] hover:bg-[#F1F5F9]"><MoreHorizontal className="h-4 w-4" /></button></td>
                       </tr>
                       {server.id === selectedStatsAnchorId && scheduleServers.length > 0 && (
                         <tr className="border-b border-[#DCE3F0] bg-[#F8FAFC]">
                           <td colSpan={tableColumnCount} className="sticky left-0 z-30 px-4 py-4">
-                            <div className="w-[calc(100vw-208px)] max-w-[calc(100vw-208px)] overflow-hidden rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                            <div className="w-full max-w-full overflow-hidden rounded-[10px] border border-[#DCE3F0] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                               <div className="flex flex-wrap items-center gap-3 border-b border-[#E5E7EB] px-4 py-3">
                                 <div className="order-2 min-w-[220px] flex-1">
                                   <h2 className="text-[15px] font-bold text-[#111827]">Server Statistics</h2>
@@ -1687,18 +1697,19 @@ export default function SendingPage() {
                                     className="min-w-max"
                                     style={{ width: `${310 + selectedStatsWindow.days.length * 176}px` }}
                                   >
+                                    <div className="sticky top-0 z-50 bg-white">
                                     <div
                                       className="grid h-[42px] border-b border-[#DCE3F0]"
                                       style={{ gridTemplateColumns: `220px 90px repeat(${selectedStatsWindow.days.length}, 176px)` }}
                                     >
-                                      <div className="sticky left-0 top-0 z-50 border-r border-[#DCE3F0] bg-[#F8FAFC] px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-[#475569] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Server</div>
-                                      <div className="sticky left-[220px] top-0 z-50 bg-[#F8FAFC] px-2 py-1.5 text-right text-[12px] font-bold uppercase tracking-[0.03em] text-[#475569] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Month Total</div>
+                                      <div className="sticky left-0 z-50 border-r border-[#DCE3F0] bg-[#F8FAFC] px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-[#475569] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Server</div>
+                                      <div className="sticky left-[220px] z-50 bg-[#F8FAFC] px-2 py-1.5 text-right text-[12px] font-bold uppercase tracking-[0.03em] text-[#475569] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Month Total</div>
                                       {selectedStatsWindow.days.map((day) => {
                                         const isMonday = new Date(`${day.key}T12:00:00Z`).getDay() === 1;
                                         return (
                                           <div
                                             key={day.key}
-                                            className={`sticky top-0 z-30 border-r border-[#DCE3F0] bg-[#F8FAFC] px-2 py-1.5 text-center ${isMonday ? "border-l-2 border-l-[#94A3B8]" : ""}`}
+                                            className={`border-r border-[#DCE3F0] bg-[#F8FAFC] px-2 py-1.5 text-center ${isMonday ? "border-l-2 border-l-[#94A3B8]" : ""}`}
                                           >
                                             <span className="block text-[12px] font-bold uppercase text-[#475569]">{day.label}</span>
                                             <span className="block text-[11px] font-semibold text-[#94A3B8]">{day.dateLabel}</span>
@@ -1710,8 +1721,8 @@ export default function SendingPage() {
                                       className="grid h-[34px] border-b border-[#DCE3F0]"
                                       style={{ gridTemplateColumns: `220px 90px repeat(${selectedStatsWindow.days.length}, 176px)` }}
                                     >
-                                      <div className="sticky left-0 top-[42px] z-50 border-r border-[#DCE3F0] bg-white px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Daily total</div>
-                                      <div className="sticky left-[220px] top-[42px] z-50 bg-white px-2 py-1.5 text-right text-[13px] font-bold text-[#111827] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">{formatNumber(weeklyTotals.sent)}</div>
+                                      <div className="sticky left-0 z-50 border-r border-[#DCE3F0] bg-white px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-[#64748B] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">Daily total</div>
+                                      <div className="sticky left-[220px] z-50 bg-white px-2 py-1.5 text-right text-[13px] font-bold text-[#111827] shadow-[8px_0_14px_-12px_rgba(15,23,42,0.4)]">{formatNumber(weeklyTotals.sent)}</div>
                                       {monthlySchedule.dailyTotals.map((day) => {
                                         const isMonday = new Date(`${day.key}T12:00:00Z`).getDay() === 1;
                                         return (
@@ -1725,6 +1736,7 @@ export default function SendingPage() {
                                           </div>
                                         );
                                       })}
+                                    </div>
                                     </div>
                                     {monthlySchedule.rows.map((row) => (
                                       <div
@@ -2015,12 +2027,30 @@ export default function SendingPage() {
               </table>
             </div>
 
-            <div className="flex items-center justify-between px-4 py-3">
-              <p className="text-[12px] text-[#6B7280]">Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} servers</p>
-              <div className="flex items-center gap-1">
-                <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
-                {Array.from({ length: Math.min(pageCount, 5) }, (_, index) => index + 1).map((number) => <button key={number} onClick={() => setPage(number)} className={`h-8 min-w-8 rounded-[7px] px-2 text-[12px] font-semibold ${page === number ? "bg-[#4F46E5] text-white" : "border border-[#E5E7EB] bg-white text-[#374151]"}`}>{number}</button>)}
-                <button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+              <p className="text-[12px] text-[#6B7280]">Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} servers</p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={Number.isFinite(pageSize) ? String(pageSize) : "all"}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setPageSize(value === "all" ? Infinity : Number(value));
+                    setPage(1);
+                    setSelected([]);
+                  }}
+                  className="h-7 rounded-[7px] border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#374151]"
+                >
+                  <option value={10}>10 servers</option>
+                  <option value={25}>25 servers</option>
+                  <option value={50}>50 servers</option>
+                  <option value={100}>100 servers</option>
+                  <option value="all">All servers</option>
+                </select>
+                <div className="flex items-center gap-1">
+                  <button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
+                  {Array.from({ length: Math.min(pageCount, 5) }, (_, index) => index + 1).map((number) => <button key={number} onClick={() => setPage(number)} className={`h-8 min-w-8 rounded-[7px] px-2 text-[12px] font-semibold ${page === number ? "bg-[#4F46E5] text-white" : "border border-[#E5E7EB] bg-white text-[#374151]"}`}>{number}</button>)}
+                  <button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="flex h-8 w-8 items-center justify-center rounded-[7px] border border-[#E5E7EB] bg-white text-[#6B7280] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+                </div>
               </div>
             </div>
           </div>
