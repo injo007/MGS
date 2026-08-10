@@ -295,12 +295,6 @@ function sendingStatus(server: ServerRow, bounceRate: number, ts04Rate: number) 
   return "active";
 }
 
-function rateClass(value: number, warn: number, danger: number) {
-  if (value >= danger) return "bg-[#FEF2F2] text-[#DC2626]";
-  if (value >= warn) return "bg-[#FFF7ED] text-[#EA580C]";
-  return "text-[#15803D]";
-}
-
 function KpiCard({
   label,
   value,
@@ -825,7 +819,7 @@ export default function SendingPage() {
   };
 
   const tabs = warmupEnabled ? [BASE_TABS[0], BASE_TABS[1], WARMUP_TAB, BASE_TABS[2], BASE_TABS[3]] : BASE_TABS;
-  const tableColumnCount = warmupEnabled ? 14 : 13;
+  const tableColumnCount = warmupEnabled ? 10 : 9;
 
   const toggleRow = (id: string) => {
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -1496,7 +1490,7 @@ export default function SendingPage() {
                 <thead>
                   <tr className="border-b border-[#E5E7EB]">
                     <th className="w-10 px-4 py-3"></th>
-                    {["Server", "Provider", "Today Volume", "Success Rate", "Bounce %", "TSS04 %", "Complaints", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
+                    {["Server", "Provider", "Today Volume", ...(warmupEnabled ? ["Warmup Stage"] : []), "Monitoring", "Status", "Last Updated", "Assigned To", "Actions"].map((header) => (
                       <th key={header} className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-[0.03em] text-[#4B5563]">{header}</th>
                     ))}
                   </tr>
@@ -1510,7 +1504,7 @@ export default function SendingPage() {
                     ))
                   ) : paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={15} className="px-3 py-14 text-center">
+                      <td colSpan={tableColumnCount} className="px-3 py-14 text-center">
                         <div className="flex flex-col items-center gap-2 text-[#9CA3AF]"><Inbox className="h-8 w-8" /><span className="text-[13px]">No tracked servers match the current filters.</span></div>
                       </td>
                     </tr>
@@ -1565,10 +1559,6 @@ export default function SendingPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-[12px] font-semibold text-[#15803D]">{pct(server.delivered, server.totalSends, 1)}%</td>
-                        <td className="px-3 py-3"><span className={`rounded-[5px] px-2 py-0.5 text-[12px] font-semibold ${rateClass(server.bounceRate, 1.5, 3)}`}>{server.bounceRate.toFixed(1)}%</span></td>
-                        <td className="px-3 py-3"><span className={`rounded-[5px] px-2 py-0.5 text-[12px] font-semibold ${rateClass(server.ts04Rate, 0.7, 1.2)}`}>{server.ts04Rate.toFixed(1)}%</span></td>
-                        <td className="px-3 py-3"><span className={`rounded-[5px] px-2 py-0.5 text-[12px] font-semibold ${rateClass(server.complaintRate, 0.05, 0.1)}`}>{server.complaintRate.toFixed(2)}%</span></td>
                         {warmupEnabled && <td className="px-3 py-3"><span className="rounded-[5px] bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold text-[#4F46E5]">{warmupStage(server)}</span></td>}
                         <td className="px-3 py-3">
                           <button onClick={() => setAutoThrottle({ ...autoThrottle, [server.id]: !autoThrottle[server.id] })} className={`h-5 w-9 rounded-full p-0.5 transition ${autoThrottle[server.id] ? "bg-[#4F46E5]" : "bg-[#CBD5E1]"}`}>
